@@ -1,3 +1,11 @@
+E-Learning Platform 
+
+![image alt](https://github.com/sobin-17/Educore/blob/82ffc1c84b48e28b26a8f30a90e272cb4d8f1791/Screenshot%202025-08-21%20194652.png)
+
+
+
+
+
 # Getting Started with Create React App
 
 This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
