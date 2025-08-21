@@ -1,10 +1,12 @@
-E-Learning Platform 
+# E-Learning Platform 
 
 ![image alt](https://github.com/sobin-17/Educore/blob/82ffc1c84b48e28b26a8f30a90e272cb4d8f1791/Screenshot%202025-08-21%20194652.png)
-
-
-
-
+![image alt](https://github.com/sobin-17/Educore/blob/8510bb38412a457cd676b3ec46fa5362eab43d5c/Screenshot%202025-08-21%20194711.png)
+![image alt](https://github.com/sobin-17/Educore/blob/8510bb38412a457cd676b3ec46fa5362eab43d5c/Screenshot%202025-08-21%20194730.png)
+![image alt](https://github.com/sobin-17/Educore/blob/8510bb38412a457cd676b3ec46fa5362eab43d5c/Screenshot%202025-08-21%20194740.png)
+![image alt](https://github.com/sobin-17/Educore/blob/8510bb38412a457cd676b3ec46fa5362eab43d5c/Screenshot%202025-08-21%20194819.png)
+![image alt](https://github.com/sobin-17/Educore/blob/8510bb38412a457cd676b3ec46fa5362eab43d5c/Screenshot%202025-08-21%20194849.png)
+![image alt](https://github.com/sobin-17/Educore/blob/8510bb38412a457cd676b3ec46fa5362eab43d5c/Screenshot%202025-08-21%20194859.png)
 
 # Getting Started with Create React App
 
