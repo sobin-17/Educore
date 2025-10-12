@@ -416,7 +416,9 @@ const CourseCard = () => {
                                                 <div className="flex items-center">
                                                     <Star className="h-4 w-4 text-yellow-400 fill-current" />
                                                     <span className="ml-1 text-sm text-gray-600">
-                                                        {course.average_rating ? course.average_rating.toFixed(1) : 'N/A'}
+                                                    {course.average_rating && !isNaN(Number(course.average_rating)) 
+                                                        ? Number(course.average_rating).toFixed(1) 
+                                                        : 'N/A'} ({course.review_count || 0} reviews)
                                                     </span>
                                                     <span className="ml-1 text-sm text-gray-500">
                                                         ({course.review_count || 0})
@@ -492,7 +494,9 @@ const CourseCard = () => {
                                                     <div className="flex items-center">
                                                         <Star className="h-4 w-4 text-yellow-400 fill-current" />
                                                         <span className="ml-1 text-sm text-gray-600">
-                                                            {course.average_rating ? course.average_rating.toFixed(1) : 'N/A'}
+                                                        {course.average_rating && !isNaN(Number(course.average_rating)) 
+                                                        ? Number(course.average_rating).toFixed(1) 
+                                                        : 'N/A'} ({course.review_count || 0} reviews)
                                                         </span>
                                                         <span className="ml-1 text-sm text-gray-500">
                                                             ({course.review_count || 0})

@@ -6,14 +6,16 @@ const jwt = require('jsonwebtoken');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
+const dotenv = require('dotenv');
 const { body, validationResult } = require('express-validator');
 require('dotenv').config();
 
 const app = express();
 
+
 // Middleware
-app.use(cors());
 app.use(express.json({ limit: '10mb' }));
+app.use(cors());
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
 // Serve static files (for profile images, course thumbnails, videos, documents)
@@ -118,27 +120,21 @@ const uploadMaterialFiles = multer({
     }
 });
 
-
-// Database connection with better error handling
+// Database connection with corrected configuration
 const dbConfig = {
     host: process.env.DB_HOST || 'localhost',
+    
     user: process.env.DB_USER || 'root',
     password: process.env.DB_PASSWORD || '',
     database: process.env.DB_NAME || 'elearning',
-    acquireTimeout: 60000,
-    timeout: 60000,
-    reconnect: true
+    port: process.env.DB_PORT || 3306
+    // Removed invalid options: acquireTimeout, timeout, reconnect
 };
 
 const db = mysql.createConnection(dbConfig);
 
-db.connect((err) => {
-    if (err) {
-        console.error('Database connection failed:', err.message);
-        process.exit(1);
-    }
-    console.log('MySQL connected successfully');
-
+// Function to create tables
+const createTables = () => {
     // Create chat messages table if it doesn't exist
     const createChatTable = `
         CREATE TABLE IF NOT EXISTS course_chat_messages (
@@ -151,6 +147,34 @@ db.connect((err) => {
             FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
         );
     `;
+    
+    // Create online classes table if it doesn't exist
+    const createOnlineClassesTable = `
+        CREATE TABLE IF NOT EXISTS online_classes (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            course_id INT NOT NULL,
+            instructor_id INT NOT NULL,
+            title VARCHAR(255) NOT NULL,
+            description TEXT,
+            scheduled_date DATETIME NOT NULL,
+            duration_minutes INT NOT NULL DEFAULT 60,
+            meeting_room_name VARCHAR(255) NOT NULL,
+            meeting_password VARCHAR(100),
+            max_participants INT DEFAULT 50,
+            recording_enabled BOOLEAN DEFAULT FALSE,
+            chat_enabled BOOLEAN DEFAULT TRUE,
+            screen_share_enabled BOOLEAN DEFAULT TRUE,
+            jitsi_room_config JSON,
+            status ENUM('scheduled', 'active', 'completed', 'cancelled') DEFAULT 'scheduled',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            FOREIGN KEY (course_id) REFERENCES courses(id) ON DELETE CASCADE,
+            FOREIGN KEY (instructor_id) REFERENCES users(id) ON DELETE CASCADE,
+            INDEX idx_instructor_scheduled (instructor_id, scheduled_date),
+            INDEX idx_course_scheduled (course_id, scheduled_date)
+        )
+    `;
+    
     db.query(createChatTable, (err) => {
         if (err) {
             console.error('Error creating course_chat_messages table:', err);
@@ -158,6 +182,25 @@ db.connect((err) => {
             console.log('course_chat_messages table ensured.');
         }
     });
+    
+    db.query(createOnlineClassesTable, (err) => {
+        if (err) {
+            console.error('Error creating online_classes table:', err);
+        } else {
+            console.log('online_classes table ensured.');
+        }
+    });
+};
+
+db.connect((err) => {
+    if (err) {
+        console.error('Database connection failed:', err.message);
+        process.exit(1);
+    }
+    console.log('MySQL connected successfully');
+    
+    // Create tables after connection is established
+    createTables();
 });
 
 // Handle database disconnection
@@ -174,8 +217,8 @@ db.on('error', (err) => {
 // Root route - API welcome message
 app.get('/', function(req, res) {
     res.json({
-        message: 'Welcome to E-Learning Platform API',
-        version: '1.0.0',
+        message: 'Welcome to E-Learning Platform API with Online Classes',
+        version: '1.0.1',
         status: 'active',
         endpoints: {
             health: 'GET /health',
@@ -196,7 +239,11 @@ app.get('/', function(req, res) {
             enrolledCourses: 'GET /api/student/courses',
             fetchCourseChatMessages: 'GET /api/courses/:courseId/chat/messages',
             sendCourseChatMessage: 'POST /api/courses/:courseId/chat/messages',
-            enrolledStudentsList: 'GET /api/instructor/courses/:courseId/enrolled-students'
+            enrolledStudentsList: 'GET /api/instructor/courses/:courseId/enrolled-students',
+            scheduleOnlineClass: 'POST /api/online-classes',
+            fetchOnlineClasses: 'GET /api/online-classes',
+            updateClassStatus: 'PUT /api/online-classes/:id/status',
+            instructorCoursesForClasses: 'GET /api/instructor/courses-for-classes'
         }
     });
 });
@@ -330,11 +377,10 @@ const isCourseMember = (req, res, next) => {
     });
 };
 
-
 // Register endpoint
 app.post('/auth/register', uploadProfileImage.single('profileImage'), registerValidation, async function(req, res) {
     try {
-        const errors = validationResult(req); // Corrected
+        const errors = validationResult(req);
         if (!errors.isEmpty()) {
             if (req.file) {
                 fs.unlinkSync(req.file.path);
@@ -428,7 +474,7 @@ app.post('/auth/register', uploadProfileImage.single('profileImage'), registerVa
 // Login endpoint
 app.post('/auth/login', loginValidation, async function(req, res) {
     try {
-        const errors = validationResult(req); // Corrected
+        const errors = validationResult(req);
         if (!errors.isEmpty()) {
             return res.status(400).json({
                 message: 'Validation error',
@@ -471,7 +517,7 @@ app.post('/auth/login', loginValidation, async function(req, res) {
             );
 
             const token = jwt.sign(
-                { id: user.id, role: user.role, name: user.name }, // Include user name in token payload
+                { id: user.id, role: user.role, name: user.name },
                 process.env.JWT_SECRET || 'your_jwt_secret',
                 { expiresIn: '7d' }
             );
@@ -634,10 +680,9 @@ app.get('/api/categories', function(req, res) {
             console.error('Database error fetching categories:', err);
             return res.status(500).json({ message: 'Failed to fetch categories from database.' });
         }
-        res.json({ categories: results }); // Ensure you return an object with a 'categories' key
+        res.json({ categories: results });
     });
 });
-
 
 // Get all courses (or popular courses) for homepage display
 app.get('/api/courses', function(req, res) {
@@ -705,7 +750,7 @@ app.get('/api/courses/:slug', function(req, res) {
             c.is_featured,
             c.views_count,
             c.likes_count,
-            c.instructor_id, -- Include instructor_id for frontend logic
+            c.instructor_id,
             u.name AS instructor_name,
             u.profile_image AS instructor_profile_image,
             cat.name AS category_name,
@@ -729,7 +774,7 @@ app.get('/api/courses/:slug', function(req, res) {
             title,
             type,
             content,
-            file_path, -- Keep as file_path, construct URL on the fly
+            file_path,
             duration_seconds,
             order_index,
             is_preview
@@ -749,7 +794,7 @@ app.get('/api/courses/:slug', function(req, res) {
         }
 
         const course = courseResults[0];
-        const courseId = course.id; // Get the course ID to fetch materials
+        const courseId = course.id;
 
         // Now fetch materials for this course
         db.query(materialsQuery, [courseId], function(matErr, materialResults) {
@@ -761,14 +806,13 @@ app.get('/api/courses/:slug', function(req, res) {
                     thumbnail_url: course.thumbnail ? `${req.protocol}://${req.get('host')}/uploads/course_thumbnails/${course.thumbnail}` : null,
                     trailer_video_url: course.trailer_video ? `${req.protocol}://${req.get('host')}/uploads/course_videos/${course.trailer_video}` : null,
                     instructor_profile_image_url: course.instructor_profile_image ? `${req.protocol}://${req.get('host')}/uploads/profiles/${course.instructor_profile_image}` : null,
-                    materials: [] // Ensure materials array is present, even if empty due to error
+                    materials: []
                 };
                 return res.status(200).json({ course: courseWithUrls });
             }
 
             const materialsWithUrls = materialResults.map(material => ({
                 ...material,
-                // Construct full URL for material files based on type
                 file_url: material.file_path ? `${req.protocol}://${req.get('host')}/uploads/${material.type === 'video' ? 'course_videos' : 'course_documents'}/${material.file_path}` : null
             }));
 
@@ -777,7 +821,7 @@ app.get('/api/courses/:slug', function(req, res) {
                 thumbnail_url: course.thumbnail ? `${req.protocol}://${req.get('host')}/uploads/course_thumbnails/${course.thumbnail}` : null,
                 trailer_video_url: course.trailer_video ? `${req.protocol}://${req.get('host')}/uploads/course_videos/${course.trailer_video}` : null,
                 instructor_profile_image_url: course.instructor_profile_image ? `${req.protocol}://${req.get('host')}/uploads/profiles/${course.instructor_profile_image}` : null,
-                materials: materialsWithUrls // Attach the fetched materials
+                materials: materialsWithUrls
             };
 
             res.json({ course: courseWithUrls });
@@ -867,7 +911,6 @@ app.get('/api/instructor/courses/:courseId/enrolled-students', verifyToken, isIn
     });
 });
 
-
 // Create a new course
 app.post('/api/instructor/courses', verifyToken, isInstructor, uploadCourseThumbnail.single('thumbnail'), [
     body('title').trim().isLength({ min: 5, max: 255 }).withMessage('Title must be between 5 and 255 characters'),
@@ -880,7 +923,7 @@ app.post('/api/instructor/courses', verifyToken, isInstructor, uploadCourseThumb
 ], async function(req, res) {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
-        if (req.file) fs.unlinkSync(req.file.path); // Clean up uploaded file on validation error
+        if (req.file) fs.unlinkSync(req.file.path);
         return res.status(400).json({ message: 'Validation error', errors: errors.array() });
     }
 
@@ -891,8 +934,7 @@ app.post('/api/instructor/courses', verifyToken, isInstructor, uploadCourseThumb
         is_featured = false,
     } = req.body;
 
-    const status = 'published'; // Default to published
-
+    const status = 'published';
     const instructorId = req.user.id;
     const courseSlug = slug || title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-*|-*$/g, '');
 
@@ -1038,8 +1080,201 @@ app.put('/api/instructor/courses/:id', verifyToken, isInstructor, uploadCourseTh
     });
 });
 
+// --- ONLINE CLASSES ENDPOINTS ---
+
+// 1. Schedule a new online class
+app.post('/api/online-classes', verifyToken, isInstructor, [
+    body('course_id').isInt({ min: 1 }).withMessage('Valid course ID is required'),
+    body('title').trim().isLength({ min: 3, max: 255 }).withMessage('Title must be between 3 and 255 characters'),
+    body('scheduled_date').isISO8601().withMessage('Valid scheduled date is required'),
+    body('duration_minutes').isInt({ min: 15, max: 480 }).withMessage('Duration must be between 15 and 480 minutes'),
+    body('max_participants').optional().isInt({ min: 1, max: 100 }).withMessage('Max participants must be between 1 and 100')
+], (req, res) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+        return res.status(400).json({ error: 'Validation failed', details: errors.array() });
+    }
+
+    const {
+        course_id,
+        title,
+        description,
+        scheduled_date,
+        duration_minutes,
+        meeting_room_name,
+        meeting_password,
+        max_participants,
+        recording_enabled,
+        chat_enabled,
+        screen_share_enabled,
+        jitsi_room_config
+    } = req.body;
+
+    const instructor_id = req.user.id;
+
+    // Insert the online class
+    const insertQuery = `
+        INSERT INTO online_classes (
+            course_id, instructor_id, title, description, scheduled_date, duration_minutes,
+            meeting_room_name, meeting_password, max_participants, recording_enabled,
+            chat_enabled, screen_share_enabled, jitsi_room_config
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `;
+
+    const values = [
+        course_id,
+        instructor_id,
+        title,
+        description || null,
+        scheduled_date,
+        duration_minutes || 60,
+        meeting_room_name,
+        meeting_password || null,
+        max_participants || 50,
+        recording_enabled ? 1 : 0,
+        chat_enabled !== false ? 1 : 0,
+        screen_share_enabled !== false ? 1 : 0,
+        JSON.stringify(jitsi_room_config || {})
+    ];
+
+    db.query(insertQuery, values, (insertErr, result) => {
+        if (insertErr) {
+            console.error('Database error inserting online class:', insertErr);
+            return res.status(500).json({ error: 'Failed to schedule class' });
+        }
+
+        res.status(201).json({
+            message: 'Class scheduled successfully',
+            data: {
+                id: result.insertId,
+                course_id,
+                instructor_id,
+                title,
+                description,
+                scheduled_date,
+                duration_minutes: duration_minutes || 60,
+                meeting_room_name,
+                meeting_password,
+                max_participants: max_participants || 50,
+                recording_enabled: recording_enabled || false,
+                chat_enabled: chat_enabled !== false,
+                screen_share_enabled: screen_share_enabled !== false,
+                status: 'scheduled'
+            }
+        });
+    });
+});
+
+// 2. Fetch all online classes for a given instructor
+app.get('/api/online-classes', verifyToken, isInstructor, (req, res) => {
+    const instructor_id = req.user.id;
+    const { status } = req.query;
+
+    let query = `
+        SELECT
+            oc.id,
+            oc.course_id,
+            oc.instructor_id,
+            oc.title,
+            oc.description,
+            oc.scheduled_date,
+            oc.duration_minutes,
+            oc.meeting_room_name,
+            oc.meeting_password,
+            oc.max_participants,
+            oc.recording_enabled,
+            oc.chat_enabled,
+            oc.screen_share_enabled,
+            oc.jitsi_room_config,
+            oc.status,
+            oc.created_at
+        FROM online_classes oc
+        WHERE oc.instructor_id = ?
+    `;
+
+    const params = [instructor_id];
+
+    if (status) {
+        query += ' AND oc.status = ?';
+        params.push(status);
+    }
+
+    query += ' ORDER BY oc.scheduled_date DESC';
+
+    db.query(query, params, (err, results) => {
+        if (err) {
+            console.error('Database error fetching online classes:', err);
+            return res.status(500).json({ error: 'Failed to retrieve classes' });
+        }
+
+        const processedResults = results.map(row => ({
+            ...row,
+            recording_enabled: Boolean(row.recording_enabled),
+            chat_enabled: Boolean(row.chat_enabled),
+            screen_share_enabled: Boolean(row.screen_share_enabled),
+            jitsi_room_config: typeof row.jitsi_room_config === 'string'
+                ? JSON.parse(row.jitsi_room_config)
+                : row.jitsi_room_config
+        }));
+
+        res.status(200).json({ data: processedResults });
+    });
+});
+
+// 3. Get courses for instructor (for class scheduling)
+app.get('/api/instructor/courses-for-classes', verifyToken, isInstructor, (req, res) => {
+    const instructor_id = req.user.id;
+    const query = `
+        SELECT id, title, slug, status
+        FROM courses
+        WHERE instructor_id = ? AND status = 'published'
+        ORDER BY title ASC
+    `;
+
+    db.query(query, [instructor_id], (err, results) => {
+        if (err) {
+            console.error('Database error fetching courses for classes:', err);
+            return res.status(500).json({ error: 'Failed to retrieve courses' });
+        }
+        res.status(200).json({ data: results });
+    });
+});
+
+// 4. Update online class status
+app.put('/api/online-classes/:id/status', verifyToken, isInstructor, [
+    body('status').isIn(['scheduled', 'active', 'completed', 'cancelled']).withMessage('Invalid status')
+], (req, res) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+        return res.status(400).json({ error: 'Validation failed', details: errors.array() });
+    }
+
+    const { id } = req.params;
+    const { status } = req.body;
+    const instructor_id = req.user.id;
+
+    const updateQuery = `
+        UPDATE online_classes
+        SET status = ?, updated_at = CURRENT_TIMESTAMP
+        WHERE id = ? AND instructor_id = ?
+    `;
+
+    db.query(updateQuery, [status, id, instructor_id], (err, result) => {
+        if (err) {
+            console.error('Database error updating class status:', err);
+            return res.status(500).json({ error: 'Failed to update class status' });
+        }
+
+        if (result.affectedRows === 0) {
+            return res.status(404).json({ error: 'Class not found or you are not the instructor' });
+        }
+
+        res.json({ message: 'Class status updated successfully' });
+    });
+});
+
 // --- Course Material Management ---
-app.get('/api/courses/:courseId/materials', verifyToken, (req, res) => { // Changed authenticateToken to verifyToken
+app.get('/api/courses/:courseId/materials', verifyToken, (req, res) => {
     const { courseId } = req.params;
     const userId = req.user.id;
     const userRole = req.user.role;
@@ -1184,6 +1419,141 @@ app.post('/api/instructor/courses/:courseId/materials', verifyToken, isInstructo
     });
 });
 
+// Continue with remaining endpoints...
+// --- Student Enrollment Routes ---
+app.post('/api/student/enroll/:courseId', verifyToken, isStudent, (req, res) => {
+    const { courseId } = req.params;
+    const studentId = req.user.id;
+
+    // Check if course exists and is published
+    db.query('SELECT id, status FROM courses WHERE id = ?', [courseId], (err, courseResults) => {
+        if (err) {
+            console.error('Database error checking course existence for enrollment:', err);
+            return res.status(500).json({ message: 'Failed to enroll in course.' });
+        }
+        if (courseResults.length === 0 || courseResults[0].status !== 'published') {
+            return res.status(404).json({ message: 'Course not found or not available for enrollment.' });
+        }
+
+        // Check if already enrolled
+        db.query('SELECT id FROM enrollments WHERE user_id = ? AND course_id = ?', [studentId, courseId], (err, enrollmentResults) => {
+            if (err) {
+                console.error('Database error checking existing enrollment:', err);
+                return res.status(500).json({ message: 'Failed to enroll in course.' });
+            }
+            if (enrollmentResults.length > 0) {
+                return res.status(409).json({ message: 'You are already enrolled in this course.' });
+            }
+
+            // Perform enrollment
+            const insertQuery = `
+                INSERT INTO enrollments (user_id, course_id, enrollment_date, status, progress_percentage)
+                VALUES (?, ?, NOW(), 'in_progress', 0.00)
+            `;
+            db.query(insertQuery, [studentId, courseId], (insertErr, result) => {
+                if (insertErr) {
+                    console.error('Database error during enrollment:', insertErr);
+                    return res.status(500).json({ message: 'Failed to enroll in course.' });
+                }
+                res.status(201).json({ message: 'Successfully enrolled in course.', enrollmentId: result.insertId });
+            });
+        });
+    });
+});
+
+app.get('/api/student/courses', verifyToken, isStudent, (req, res) => {
+    const studentId = req.user.id;
+    const query = `
+        SELECT
+            e.id AS enrollment_id,
+            e.enrollment_date,
+            e.progress_percentage,
+            e.status AS enrollment_status,
+            c.id AS course_id,
+            c.title,
+            c.slug,
+            c.short_description,
+            c.thumbnail,
+            c.instructor_id,
+            u.name AS instructor_name,
+            -- Aggregated data from course_summary view
+            cs.total_videos,
+            cs.total_materials,
+            cs.average_rating,
+            cs.review_count
+        FROM enrollments e
+        JOIN courses c ON e.course_id = c.id
+        JOIN users u ON c.instructor_id = u.id
+        LEFT JOIN course_summary cs ON c.id = cs.id
+        WHERE e.user_id = ?
+        ORDER BY e.enrollment_date DESC;
+    `;
+
+    db.query(query, [studentId], (err, results) => {
+        if (err) {
+            console.error('Database error fetching enrolled courses:', err);
+            return res.status(500).json({ message: 'Failed to fetch enrolled courses.' });
+        }
+        const enrolledCoursesWithUrls = results.map(course => ({
+            ...course,
+            thumbnail_url: course.thumbnail ? `${req.protocol}://${req.get('host')}/uploads/course_thumbnails/${course.thumbnail}` : null
+        }));
+        res.status(200).json({ enrolledCourses: enrolledCoursesWithUrls });
+    });
+});
+
+// --- Chat Routes ---
+app.get('/api/courses/:courseId/chat/messages', verifyToken, isCourseMember, (req, res) => {
+    const { courseId } = req.params;
+    const query = `
+        SELECT
+            ccm.id,
+            ccm.course_id,
+            ccm.user_id,
+            u.name AS user_name,
+            u.role AS user_role,
+            ccm.message_content,
+            ccm.timestamp
+        FROM course_chat_messages ccm
+        JOIN users u ON ccm.user_id = u.id
+        WHERE ccm.course_id = ?
+        ORDER BY ccm.timestamp ASC;
+    `;
+    db.query(query, [courseId], (err, results) => {
+        if (err) {
+            console.error('Database error fetching chat messages:', err);
+            return res.status(500).json({ message: 'Failed to fetch chat messages.' });
+        }
+        res.status(200).json({ messages: results });
+    });
+});
+
+app.post('/api/courses/:courseId/chat/messages', verifyToken, isCourseMember, [
+    body('message_content').trim().notEmpty().withMessage('Message content cannot be empty.')
+], (req, res) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+        return res.status(400).json({ message: 'Validation error', errors: errors.array() });
+    }
+
+    const { courseId } = req.params;
+    const { message_content } = req.body;
+    const userId = req.user.id;
+
+    const query = `
+        INSERT INTO course_chat_messages (course_id, user_id, message_content, timestamp)
+        VALUES (?, ?, ?, NOW())
+    `;
+    db.query(query, [courseId, userId, message_content], (err, result) => {
+        if (err) {
+            console.error('Database error sending chat message:', err);
+            return res.status(500).json({ message: 'Failed to send message.' });
+        }
+        res.status(201).json({ message: 'Message sent successfully', messageId: result.insertId });
+    });
+});
+
+// Update material endpoint
 app.put('/api/instructor/courses/:courseId/materials/:materialId', verifyToken, isInstructor, uploadMaterialFiles.fields([{ name: 'video', maxCount: 1 }, { name: 'document', maxCount: 1 }]), [
     body('title').optional().trim().isLength({ min: 3, max: 255 }).withMessage('Title must be between 3 and 255 characters'),
     body('type').optional().isIn(['video', 'document', 'quiz', 'other']).withMessage('Invalid material type'),
@@ -1291,6 +1661,7 @@ app.put('/api/instructor/courses/:courseId/materials/:materialId', verifyToken, 
     });
 });
 
+// Delete material endpoint
 app.delete('/api/instructor/courses/:courseId/materials/:materialId', verifyToken, isInstructor, (req, res) => {
     const { courseId, materialId } = req.params;
 
@@ -1341,250 +1712,1778 @@ app.delete('/api/instructor/courses/:courseId/materials/:materialId', verifyToke
     });
 });
 
-// --- Public Course Routes (already existing, ensuring instructor_id is passed) ---
-// This route is duplicated from above, ensure it's removed or handled properly in a real app.
-// For this context, I'm assuming it's meant to be the primary public route.
-app.get('/api/courses/:slug', function(req, res) {
-    const { slug } = req.params;
-    // Main query for course details
-    const courseQuery = `
-        SELECT
-            c.id,
-            c.title,
-            c.slug,
-            c.description,
-            c.short_description,
-            c.price,
-            c.discount_price,
-            c.thumbnail,
-            c.trailer_video,
-            c.status,
-            c.difficulty,
-            c.duration_hours,
-            c.language,
-            c.requirements,
-            c.what_you_learn,
-            c.target_audience,
-            c.is_featured,
-            c.views_count,
-            c.likes_count,
-            c.instructor_id, -- Include instructor_id for frontend logic
-            u.name AS instructor_name,
-            u.profile_image AS instructor_profile_image,
-            cat.name AS category_name,
-            cat.color AS category_color,
-            cs.enrolled_students,
-            cs.total_videos,
-            cs.total_materials,
-            cs.average_rating,
-            cs.review_count
-        FROM courses c
-        JOIN users u ON c.instructor_id = u.id
-        JOIN categories cat ON c.category_id = cat.id
-        LEFT JOIN course_summary cs ON c.id = cs.id
-        WHERE c.slug = ? AND c.status = 'published';
-    `;
 
-    // Query for course materials
-    const materialsQuery = `
-        SELECT
-            id,
-            title,
-            type,
-            content,
-            file_path, -- Keep as file_path, construct URL on the fly
-            duration_seconds,
-            order_index,
-            is_preview
-        FROM course_materials
-        WHERE course_id = ?
-        ORDER BY order_index ASC, created_at ASC;
-    `;
+// --- STUDENT ONLINE CLASS ENDPOINTS ---
 
-    db.query(courseQuery, [slug], async function(err, courseResults) {
+// Create attendance tracking table
+const createAttendanceTable = () => {
+    const createAttendanceTableQuery = `
+        CREATE TABLE IF NOT EXISTS class_attendance (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            class_id INT NOT NULL,
+            student_id INT NOT NULL,
+            joined_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            left_at TIMESTAMP NULL,
+            status ENUM('joined', 'left', 'completed') DEFAULT 'joined',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            FOREIGN KEY (class_id) REFERENCES online_classes(id) ON DELETE CASCADE,
+            FOREIGN KEY (student_id) REFERENCES users(id) ON DELETE CASCADE,
+            UNIQUE KEY unique_student_class (class_id, student_id),
+            INDEX idx_class_date (class_id, joined_at),
+            INDEX idx_student_date (student_id, joined_at)
+        )
+    `;
+    
+    db.query(createAttendanceTableQuery, (err) => {
         if (err) {
-            console.error('Database error fetching course details:', err);
-            return res.status(500).json({ message: 'Failed to fetch course details' });
+            console.error('Error creating class_attendance table:', err);
+        } else {
+            console.log('class_attendance table ensured.');
         }
+    });
+};
 
+// 1. Get online classes for a specific course (for enrolled students and instructors)
+app.get('/api/courses/:courseId/classes', verifyToken, (req, res) => {
+    const { courseId } = req.params;
+    const userId = req.user.id;
+    const userRole = req.user.role;
+
+    // First, verify user has access to this course
+    const accessQuery = `
+        SELECT c.id, c.instructor_id, 
+               e.user_id AS enrolled_user_id,
+               c.title AS course_title,
+               u.name AS instructor_name
+        FROM courses c
+        LEFT JOIN enrollments e ON c.id = e.course_id AND e.user_id = ?
+        LEFT JOIN users u ON c.instructor_id = u.id
+        WHERE c.id = ?
+    `;
+
+    db.query(accessQuery, [userId, courseId], (err, courseResults) => {
+        if (err) {
+            console.error('Database error checking course access:', err);
+            return res.status(500).json({ message: 'Failed to verify course access.' });
+        }
+        
         if (courseResults.length === 0) {
-            return res.status(404).json({ message: 'Course not found or not published' });
+            return res.status(404).json({ message: 'Course not found.' });
         }
 
         const course = courseResults[0];
-        const courseId = course.id; // Get the course ID to fetch materials
+        const isInstructorOfCourse = (userRole === 'instructor' && course.instructor_id === userId);
+        const isEnrolledStudent = (userRole === 'student' && course.enrolled_user_id === userId);
 
-        // Now fetch materials for this course
-        db.query(materialsQuery, [courseId], function(matErr, materialResults) {
-            if (matErr) {
-                console.error('Database error fetching course materials:', matErr);
-                // Even if materials fail, return the course details without materials
-                const courseWithUrls = {
-                    ...course,
-                    thumbnail_url: course.thumbnail ? `${req.protocol}://${req.get('host')}/uploads/course_thumbnails/${course.thumbnail}` : null,
-                    trailer_video_url: course.trailer_video ? `${req.protocol}://${req.get('host')}/uploads/course_videos/${course.trailer_video}` : null,
-                    instructor_profile_image_url: course.instructor_profile_image ? `${req.protocol}://${req.get('host')}/uploads/profiles/${course.instructor_profile_image}` : null,
-                    materials: [] // Ensure materials array is present, even if empty due to error
+        if (!isInstructorOfCourse && !isEnrolledStudent) {
+            return res.status(403).json({ message: 'Access denied. You are not a member of this course.' });
+        }
+
+        // Fetch online classes for this course
+        const classesQuery = `
+            SELECT 
+                oc.id,
+                oc.course_id,
+                oc.title,
+                oc.description,
+                oc.scheduled_date,
+                oc.duration_minutes,
+                oc.meeting_room_name,
+                oc.meeting_password,
+                oc.max_participants,
+                oc.recording_enabled,
+                oc.chat_enabled,
+                oc.screen_share_enabled,
+                oc.status,
+                oc.created_at,
+                oc.updated_at,
+                c.title AS course_title,
+                u.name AS instructor_name
+            FROM online_classes oc
+            JOIN courses c ON oc.course_id = c.id
+            JOIN users u ON c.instructor_id = u.id
+            WHERE oc.course_id = ?
+            ORDER BY oc.scheduled_date DESC
+        `;
+
+        db.query(classesQuery, [courseId], (classErr, classResults) => {
+            if (classErr) {
+                console.error('Database error fetching course classes:', classErr);
+                return res.status(500).json({ message: 'Failed to fetch course classes.' });
+            }
+
+            // Process results and add meeting URLs
+            const processedClasses = classResults.map(cls => {
+                // Generate meeting URL from room name
+                const meetingUrl = cls.meeting_room_name 
+                    ? `https://meet.jit.si/${cls.meeting_room_name}`
+                    : null;
+
+                // Calculate end time from scheduled_date + duration
+                const startTime = cls.scheduled_date;
+                const endTime = new Date(new Date(startTime).getTime() + (cls.duration_minutes * 60 * 1000));
+
+                return {
+                    ...cls,
+                    start_time: startTime, // Map for student component
+                    end_time: endTime.toISOString(),
+                    meeting_url: meetingUrl,
+                    recording_enabled: Boolean(cls.recording_enabled),
+                    chat_enabled: Boolean(cls.chat_enabled),
+                    screen_share_enabled: Boolean(cls.screen_share_enabled)
                 };
-                return res.status(200).json({ course: courseWithUrls });
-            }
+            });
 
-            const materialsWithUrls = materialResults.map(material => ({
-                ...material,
-                // Construct full URL for material files based on type
-                file_url: material.file_path ? `${req.protocol}://${req.get('host')}/uploads/${material.type === 'video' ? 'course_videos' : 'course_documents'}/${material.file_path}` : null
-            }));
-
-            const courseWithUrls = {
-                ...course,
-                thumbnail_url: course.thumbnail ? `${req.protocol}://${req.get('host')}/uploads/course_thumbnails/${course.thumbnail}` : null,
-                trailer_video_url: course.trailer_video ? `${req.protocol}://${req.get('host')}/uploads/course_videos/${course.trailer_video}` : null,
-                instructor_profile_image_url: course.instructor_profile_image ? `${req.protocol}://${req.get('host')}/uploads/profiles/${course.instructor_profile_image}` : null,
-                materials: materialsWithUrls // Attach the fetched materials
-            };
-
-            res.json({ course: courseWithUrls });
-        });
-    });
-});
-
-
-// --- Student Enrollment Routes ---
-app.post('/api/student/enroll/:courseId', verifyToken, isStudent, (req, res) => {
-    const { courseId } = req.params;
-    const studentId = req.user.id;
-
-    // Check if course exists and is published
-    db.query('SELECT id, status FROM courses WHERE id = ?', [courseId], (err, courseResults) => {
-        if (err) {
-            console.error('Database error checking course existence for enrollment:', err);
-            return res.status(500).json({ message: 'Failed to enroll in course.' });
-        }
-        if (courseResults.length === 0 || courseResults[0].status !== 'published') {
-            return res.status(404).json({ message: 'Course not found or not available for enrollment.' });
-        }
-
-        // Check if already enrolled
-        db.query('SELECT id FROM enrollments WHERE user_id = ? AND course_id = ?', [studentId, courseId], (err, enrollmentResults) => {
-            if (err) {
-                console.error('Database error checking existing enrollment:', err);
-                return res.status(500).json({ message: 'Failed to enroll in course.' });
-            }
-            if (enrollmentResults.length > 0) {
-                return res.status(409).json({ message: 'You are already enrolled in this course.' });
-            }
-
-            // Perform enrollment
-            const insertQuery = `
-                INSERT INTO enrollments (user_id, course_id, enrollment_date, status, progress_percentage)
-                VALUES (?, ?, NOW(), 'in_progress', 0.00)
-            `;
-            db.query(insertQuery, [studentId, courseId], (insertErr, result) => {
-                if (insertErr) {
-                    console.error('Database error during enrollment:', insertErr);
-                    return res.status(500).json({ message: 'Failed to enroll in course.' });
+            res.status(200).json({ 
+                classes: processedClasses,
+                course_info: {
+                    id: course.id,
+                    title: course.course_title,
+                    instructor_name: course.instructor_name
                 }
-                res.status(201).json({ message: 'Successfully enrolled in course.', enrollmentId: result.insertId });
             });
         });
     });
 });
 
-app.get('/api/student/courses', verifyToken, isStudent, (req, res) => {
-    const studentId = req.user.id;
-    const query = `
-        SELECT
-            e.id AS enrollment_id,
-            e.enrollment_date, -- Corrected column name
-            e.progress_percentage,
-            e.status AS enrollment_status,
-            c.id AS course_id,
-            c.title,
-            c.slug,
-            c.short_description,
-            c.thumbnail,
-            c.instructor_id,
-            u.name AS instructor_name,
-            -- Aggregated data from course_summary view
-            cs.total_videos,
-            cs.total_materials,
-            cs.average_rating,
-            cs.review_count
+// 2. Join/Record attendance for an online class (for students)
+app.post('/api/courses/:courseId/classes/:classId/join', verifyToken, (req, res) => {
+    const { courseId, classId } = req.params;
+    const userId = req.user.id;
+    const userRole = req.user.role;
+
+    // Verify student is enrolled in the course
+    if (userRole !== 'student') {
+        return res.status(403).json({ message: 'Only students can join classes through this endpoint.' });
+    }
+
+    const verifyEnrollmentQuery = `
+        SELECT e.id, oc.title AS class_title, oc.meeting_room_name, oc.status
         FROM enrollments e
         JOIN courses c ON e.course_id = c.id
+        JOIN online_classes oc ON oc.course_id = c.id AND oc.id = ?
+        WHERE e.user_id = ? AND e.course_id = ?
+    `;
+
+    db.query(verifyEnrollmentQuery, [classId, userId, courseId], (err, results) => {
+        if (err) {
+            console.error('Database error verifying enrollment for class join:', err);
+            return res.status(500).json({ message: 'Failed to join class.' });
+        }
+
+        if (results.length === 0) {
+            return res.status(404).json({ message: 'Class not found or you are not enrolled in this course.' });
+        }
+
+        const classInfo = results[0];
+
+        // Optional: Create attendance record
+        const attendanceQuery = `
+            INSERT INTO class_attendance (class_id, student_id, joined_at, status)
+            VALUES (?, ?, NOW(), 'joined')
+            ON DUPLICATE KEY UPDATE joined_at = NOW(), status = 'joined'
+        `;
+
+        db.query(attendanceQuery, [classId, userId], (attendanceErr) => {
+            if (attendanceErr) {
+                console.error('Database error recording attendance:', attendanceErr);
+                // Don't fail the join request if attendance recording fails
+            }
+
+            // Return success response with meeting info
+            res.status(200).json({
+                message: 'Successfully joined class',
+                class_info: {
+                    id: classId,
+                    title: classInfo.class_title,
+                    meeting_url: `https://meet.jit.si/${classInfo.meeting_room_name}`,
+                    status: classInfo.status
+                }
+            });
+        });
+    });
+});
+
+// 3. Get all online classes for a student's enrolled courses
+app.get('/api/student/online-classes', verifyToken, isStudent, (req, res) => {
+    const studentId = req.user.id;
+    const { status } = req.query; // Optional filter by status
+
+    let query = `
+        SELECT 
+            oc.id,
+            oc.course_id,
+            oc.title,
+            oc.description,
+            oc.scheduled_date,
+            oc.duration_minutes,
+            oc.meeting_room_name,
+            oc.meeting_password,
+            oc.max_participants,
+            oc.recording_enabled,
+            oc.chat_enabled,
+            oc.screen_share_enabled,
+            oc.status,
+            oc.created_at,
+            oc.updated_at,
+            c.title AS course_title,
+            u.name AS instructor_name
+        FROM online_classes oc
+        JOIN courses c ON oc.course_id = c.id
         JOIN users u ON c.instructor_id = u.id
-        LEFT JOIN course_summary cs ON c.id = cs.id
-        WHERE e.user_id = ?
-        ORDER BY e.enrollment_date DESC; -- Corrected column name
+        JOIN enrollments e ON e.course_id = c.id
+        WHERE e.user_id = ? AND e.status = 'in_progress'
     `;
 
-    db.query(query, [studentId], (err, results) => {
+    const params = [studentId];
+
+    if (status) {
+        query += ' AND oc.status = ?';
+        params.push(status);
+    }
+
+    query += ' ORDER BY oc.scheduled_date DESC';
+
+    db.query(query, params, (err, results) => {
         if (err) {
-            console.error('Database error fetching enrolled courses:', err);
-            return res.status(500).json({ message: 'Failed to fetch enrolled courses.' });
+            console.error('Database error fetching student online classes:', err);
+            return res.status(500).json({ message: 'Failed to fetch online classes.' });
         }
-        const enrolledCoursesWithUrls = results.map(course => ({
-            ...course,
-            thumbnail_url: course.thumbnail ? `${req.protocol}://${req.get('host')}/uploads/course_thumbnails/${course.thumbnail}` : null
-        }));
-        res.status(200).json({ enrolledCourses: enrolledCoursesWithUrls });
+
+        // Process results similar to course classes endpoint
+        const processedClasses = results.map(cls => {
+            const meetingUrl = cls.meeting_room_name 
+                ? `https://meet.jit.si/${cls.meeting_room_name}`
+                : null;
+
+            const startTime = cls.scheduled_date;
+            const endTime = new Date(new Date(startTime).getTime() + (cls.duration_minutes * 60 * 1000));
+
+            return {
+                ...cls,
+                start_time: startTime,
+                end_time: endTime.toISOString(),
+                meeting_url: meetingUrl,
+                recording_enabled: Boolean(cls.recording_enabled),
+                chat_enabled: Boolean(cls.chat_enabled),
+                screen_share_enabled: Boolean(cls.screen_share_enabled)
+            };
+        });
+
+        res.status(200).json({ classes: processedClasses });
     });
 });
 
-// --- Chat Routes ---
-app.get('/api/courses/:courseId/chat/messages', verifyToken, isCourseMember, (req, res) => {
-    const { courseId } = req.params;
+
+// Example Express.js route
+// Replace your current admin login endpoint with this:
+// REPLACE the broken admin login endpoint with this working version:
+app.post('/api/auth/admin-login', loginValidation, (req, res) => {
+    console.log('Admin login endpoint hit');
+    
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+        return res.status(400).json({
+            message: 'Validation error',
+            errors: errors.array()
+        });
+    }
+
+    const { email, password } = req.body;
+    console.log('Admin login attempt for:', email);
+
     const query = `
-        SELECT
-            ccm.id,
-            ccm.course_id,
-            ccm.user_id,
-            u.name AS user_name,
-            u.role AS user_role,
-            ccm.message_content,
-            ccm.timestamp
-        FROM course_chat_messages ccm
-        JOIN users u ON ccm.user_id = u.id
-        WHERE ccm.course_id = ?
-        ORDER BY ccm.timestamp ASC;
+        SELECT id, name, email, password, role, status, profile_image, bio,
+        phone, date_of_birth, gender, country, email_verified, last_login
+        FROM users
+        WHERE email = ? AND status = 'active' AND role = 'admin'
     `;
-    db.query(query, [courseId], (err, results) => {
+
+    db.query(query, [email], (err, results) => {
         if (err) {
-            console.error('Database error fetching chat messages:', err);
-            return res.status(500).json({ message: 'Failed to fetch chat messages.' });
+            console.error('Database error during admin login:', err);
+            return res.status(500).json({ message: 'Login failed' });
         }
-        res.status(200).json({ messages: results });
+
+        console.log('Admin query results:', results.length);
+
+        if (results.length === 0) {
+            console.log('No admin found with email:', email);
+            return res.status(401).json({ message: 'Invalid admin credentials' });
+        }
+
+        const admin = results[0];
+        console.log('Found admin:', { id: admin.id, email: admin.email, role: admin.role });
+
+        bcrypt.compare(password, admin.password, (bcryptErr, isMatch) => {
+            if (bcryptErr) {
+                console.error('Password comparison error:', bcryptErr);
+                return res.status(500).json({ message: 'Login failed' });
+            }
+
+            if (!isMatch) {
+                console.log('Invalid password for admin:', email);
+                return res.status(401).json({ message: 'Invalid admin credentials' });
+            }
+
+            console.log('Password match successful for admin:', email);
+
+            db.query(
+                'UPDATE users SET last_login = NOW() WHERE id = ?',
+                [admin.id],
+                (updateErr) => {
+                    if (updateErr) console.error('Failed to update admin last login:', updateErr);
+                }
+            );
+
+            const token = jwt.sign(
+                { id: admin.id, role: admin.role, name: admin.name },
+                process.env.JWT_SECRET || 'your_jwt_secret',
+                { expiresIn: '7d' }
+            );
+
+            const { password: _, ...adminResponse } = admin;
+
+            if (adminResponse.profile_image) {
+                adminResponse.profile_image_url = `${req.protocol}://${req.get('host')}/uploads/profiles/${adminResponse.profile_image}`;
+            }
+
+            console.log('Admin login successful, sending response');
+
+            res.json({
+                success: true,
+                message: 'Admin login successful',
+                token,
+                user: adminResponse
+            });
+        });
     });
 });
 
-app.post('/api/courses/:courseId/chat/messages', verifyToken, isCourseMember, [
-    body('message_content').trim().notEmpty().withMessage('Message content cannot be empty.')
+// Middleware to check if user is an admin
+const isAdmin = (req, res, next) => {
+    if (req.user && req.user.role === 'admin') {
+        next();
+    } else {
+        res.status(403).json({ message: 'Access denied. Only admins can perform this action.' });
+    }
+};
+
+// Fix 1: Get all users - REPLACE the async version
+// Fix 1: Get all users - REPLACE the async version
+// GET ALL USERS (Admin only)
+app.get('/api/admin/users', verifyToken, isAdmin, (req, res) => {
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 20;
+    const offset = (page - 1) * limit;
+    const search = req.query.search || '';
+
+    const countQuery = `
+        SELECT COUNT(*) as total 
+        FROM users 
+        WHERE status != 'deleted' 
+        AND (name LIKE ? OR email LIKE ?)
+    `;
+    const searchParam = `%${search}%`;
+
+    db.query(countQuery, [searchParam, searchParam], (err, countResult) => {
+        if (err) {
+            console.error('Database error fetching users count:', err);
+            return res.status(500).json({ 
+                error: true, 
+                message: 'Failed to fetch users count.', 
+                details: err.message 
+            });
+        }
+
+        const totalUsers = countResult[0].total || 0;
+        const totalPages = Math.ceil(totalUsers / limit);
+
+        const query = `
+            SELECT 
+                id,
+                name,
+                email,
+                role,
+                status,
+                profile_image,
+                phone,
+                date_of_birth,
+                gender,
+                country,
+                bio,
+                email_verified,
+                last_login,
+                created_at,
+                updated_at
+            FROM users 
+            WHERE status != 'deleted' 
+            AND (name LIKE ? OR email LIKE ?)
+            ORDER BY created_at DESC
+            LIMIT ? OFFSET ?
+        `;
+
+        db.query(query, [searchParam, searchParam, limit, offset], (err, users) => {
+            if (err) {
+                console.error('Database error fetching users:', err);
+                return res.status(500).json({ 
+                    error: true, 
+                    message: 'Failed to fetch users.', 
+                    details: err.message 
+                });
+            }
+
+            // Add profile image URLs
+            const usersWithUrls = users.map(user => ({
+                ...user,
+                profile_image_url: user.profile_image ? `${req.protocol}://${req.get('host')}/uploads/profiles/${user.profile_image}` : null
+            }));
+
+            res.json({ 
+                error: false,
+                users: usersWithUrls, 
+                pagination: { 
+                    currentPage: page, 
+                    totalPages, 
+                    totalUsers, 
+                    limit 
+                } 
+            });
+        });
+    });
+});
+
+// ... (Rest of the existing code, e.g., /api/admin/statistics, graceful shutdown, etc.)
+
+// Additional Admin Backend API Endpoints - Add these to your existing server.js
+
+// Additional Admin Backend API Endpoints - Add these to your existing server.js
+
+// ADD this endpoint to your server.js file to fix the admin dashboard course loading error
+
+// GET ALL COURSES FOR ADMIN (with full details including instructor info and enrollment counts)
+app.get('/api/admin/courses', verifyToken, isAdmin, (req, res) => {
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 50;
+    const offset = (page - 1) * limit;
+
+    const countQuery = 'SELECT COUNT(*) as total FROM courses';
+    
+    db.query(countQuery, (err, countResult) => {
+        if (err) {
+            console.error('Database error counting courses:', err);
+            return res.status(500).json({ message: 'Failed to fetch courses count.' });
+        }
+
+        const totalCourses = countResult[0].total;
+        const totalPages = Math.ceil(totalCourses / limit);
+
+        const query = `
+            SELECT 
+                c.id,
+                c.title,
+                c.slug,
+                c.short_description,
+                c.description,
+                c.price,
+                c.discount_price,
+                c.thumbnail,
+                c.status,
+                c.difficulty,
+                c.duration_hours,
+                c.language,
+                c.is_featured,
+                c.views_count,
+                c.likes_count,
+                c.created_at,
+                c.updated_at,
+                u.name AS instructor_name,
+                u.email AS instructor_email,
+                u.id AS instructor_id,
+                cat.name AS category_name,
+                -- Count enrolled students for each course
+                (SELECT COUNT(*) FROM enrollments WHERE course_id = c.id) AS enrolled_students_count,
+                -- Count course materials
+                (SELECT COUNT(*) FROM course_materials WHERE course_id = c.id) AS materials_count
+            FROM courses c
+            JOIN users u ON c.instructor_id = u.id
+            LEFT JOIN categories cat ON c.category_id = cat.id
+            ORDER BY c.created_at DESC
+            LIMIT ? OFFSET ?
+        `;
+
+        db.query(query, [limit, offset], (err, courses) => {
+            if (err) {
+                console.error('Database error fetching admin courses:', err);
+                return res.status(500).json({ message: 'Failed to fetch courses.' });
+            }
+
+            // Add thumbnail URLs
+            const coursesWithUrls = courses.map(course => ({
+                ...course,
+                thumbnail_url: course.thumbnail ? `${req.protocol}://${req.get('host')}/uploads/course_thumbnails/${course.thumbnail}` : null
+            }));
+
+            res.json({ 
+                courses: coursesWithUrls, 
+                pagination: { 
+                    currentPage: page, 
+                    totalPages, 
+                    totalCourses: totalCourses, 
+                    limit 
+                } 
+            });
+        });
+    });
+});
+
+// UPDATE COURSE STATUS (Admin only)
+app.put('/api/admin/courses/:id/status', verifyToken, isAdmin, [
+    body('status').isIn(['draft', 'published', 'archived']).withMessage('Invalid status')
 ], (req, res) => {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
         return res.status(400).json({ message: 'Validation error', errors: errors.array() });
     }
 
-    const { courseId } = req.params;
-    const { message_content } = req.body;
-    const userId = req.user.id;
+    const courseId = req.params.id;
+    const { status } = req.body;
 
-    const query = `
-        INSERT INTO course_chat_messages (course_id, user_id, message_content, timestamp)
-        VALUES (?, ?, ?, NOW())
+    const updateQuery = `
+        UPDATE courses 
+        SET status = ?, updated_at = NOW() 
+        WHERE id = ?
     `;
-    db.query(query, [courseId, userId, message_content], (err, result) => {
+
+    db.query(updateQuery, [status, courseId], (err, result) => {
         if (err) {
-            console.error('Database error sending chat message:', err);
-            return res.status(500).json({ message: 'Failed to send message.' });
+            console.error('Database error updating course status:', err);
+            return res.status(500).json({ message: 'Failed to update course status.' });
         }
-        res.status(201).json({ message: 'Message sent successfully', messageId: result.insertId });
+
+        if (result.affectedRows === 0) {
+            return res.status(404).json({ message: 'Course not found.' });
+        }
+
+        res.json({ message: 'Course status updated successfully.' });
+    });
+});
+
+// DELETE COURSE (Admin only)
+app.delete('/api/admin/courses/:id', verifyToken, isAdmin, (req, res) => {
+    const courseId = req.params.id;
+
+    // First, get course details for cleanup
+    const getCourseQuery = `
+        SELECT id, thumbnail, title
+        FROM courses 
+        WHERE id = ?
+    `;
+
+    db.query(getCourseQuery, [courseId], (err, courseResults) => {
+        if (err) {
+            console.error('Database error fetching course for deletion:', err);
+            return res.status(500).json({ message: 'Failed to delete course.' });
+        }
+
+        if (courseResults.length === 0) {
+            return res.status(404).json({ message: 'Course not found.' });
+        }
+
+        const course = courseResults[0];
+
+        // Start transaction for cleanup
+        db.beginTransaction((transErr) => {
+            if (transErr) {
+                console.error('Transaction error:', transErr);
+                return res.status(500).json({ message: 'Failed to delete course.' });
+            }
+
+            // Delete in order: enrollments, materials, course
+            const deleteEnrollments = `DELETE FROM enrollments WHERE course_id = ?`;
+            const deleteMaterials = `DELETE FROM course_materials WHERE course_id = ?`;
+            const deleteCourse = `DELETE FROM courses WHERE id = ?`;
+
+            db.query(deleteEnrollments, [courseId], (enrollErr) => {
+                if (enrollErr) {
+                    return db.rollback(() => {
+                        console.error('Error deleting enrollments:', enrollErr);
+                        res.status(500).json({ message: 'Failed to delete course.' });
+                    });
+                }
+
+                db.query(deleteMaterials, [courseId], (matErr) => {
+                    if (matErr) {
+                        return db.rollback(() => {
+                            console.error('Error deleting materials:', matErr);
+                            res.status(500).json({ message: 'Failed to delete course.' });
+                        });
+                    }
+
+                    db.query(deleteCourse, [courseId], (courseErr, result) => {
+                        if (courseErr) {
+                            return db.rollback(() => {
+                                console.error('Error deleting course:', courseErr);
+                                res.status(500).json({ message: 'Failed to delete course.' });
+                            });
+                        }
+
+                        db.commit((commitErr) => {
+                            if (commitErr) {
+                                return db.rollback(() => {
+                                    console.error('Transaction commit error:', commitErr);
+                                    res.status(500).json({ message: 'Failed to delete course.' });
+                                });
+                            }
+
+                            // Clean up thumbnail file if exists
+                            if (course.thumbnail) {
+                                const thumbnailPath = path.join(courseThumbnailsDir, course.thumbnail);
+                                if (fs.existsSync(thumbnailPath)) {
+                                    fs.unlinkSync(thumbnailPath);
+                                }
+                            }
+
+                            res.json({ message: 'Course deleted successfully.' });
+                        });
+                    });
+                });
+            });
+        });
     });
 });
 
 
+
+// UPDATE USER (Admin only)
+app.put('/api/admin/users/:id', verifyToken, isAdmin, [
+    body('name').optional().trim().isLength({ min: 2, max: 100 }).withMessage('Name must be between 2 and 100 characters'),
+    body('email').optional().isEmail().normalizeEmail().withMessage('Please provide a valid email'),
+    body('role').optional().isIn(['student', 'instructor', 'parent', 'admin']).withMessage('Invalid role'),
+    body('status').optional().isIn(['active', 'inactive']).withMessage('Invalid status'),
+    body('phone').optional().isMobilePhone().withMessage('Please provide a valid phone number'),
+    body('country').optional().isLength({ min: 2, max: 100 }).withMessage('Country name must be between 2 and 100 characters')
+], (req, res) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+        return res.status(400).json({ message: 'Validation error', errors: errors.array() });
+    }
+
+    const userId = req.params.id;
+    const { name, email, role, status, phone, country, bio } = req.body;
+
+    // Build dynamic update query
+    let updateFields = [];
+    let updateValues = [];
+
+    if (name !== undefined) { updateFields.push('name = ?'); updateValues.push(name); }
+    if (email !== undefined) { updateFields.push('email = ?'); updateValues.push(email); }
+    if (role !== undefined) { updateFields.push('role = ?'); updateValues.push(role); }
+    if (status !== undefined) { updateFields.push('status = ?'); updateValues.push(status); }
+    if (phone !== undefined) { updateFields.push('phone = ?'); updateValues.push(phone || null); }
+    if (country !== undefined) { updateFields.push('country = ?'); updateValues.push(country || null); }
+    if (bio !== undefined) { updateFields.push('bio = ?'); updateValues.push(bio || null); }
+
+    if (updateFields.length === 0) {
+        return res.status(400).json({ message: 'No fields provided for update.' });
+    }
+
+    updateFields.push('updated_at = NOW()');
+    updateValues.push(userId);
+
+    const query = `UPDATE users SET ${updateFields.join(', ')} WHERE id = ?`;
+
+    db.query(query, updateValues, (err, result) => {
+        if (err) {
+            console.error('Database error updating user:', err);
+            if (err.code === 'ER_DUP_ENTRY') {
+                return res.status(409).json({ message: 'Email already exists' });
+            }
+            return res.status(500).json({ message: 'Failed to update user.' });
+        }
+
+        if (result.affectedRows === 0) {
+            return res.status(404).json({ message: 'User not found.' });
+        }
+
+        res.json({ message: 'User updated successfully.' });
+    });
+});
+
+// GET SYSTEM STATISTICS (Admin only)
+app.get('/api/admin/statistics', verifyToken, isAdmin, (req, res) => {
+    const queries = {
+        totalUsers: `SELECT COUNT(*) as count FROM users WHERE status != 'deleted'`,
+        adminUsers: `SELECT COUNT(*) as count FROM users WHERE role = 'admin' AND status != 'deleted'`,
+        instructorUsers: `SELECT COUNT(*) as count FROM users WHERE role = 'instructor' AND status != 'deleted'`,
+        studentUsers: `SELECT COUNT(*) as count FROM users WHERE role = 'student' AND status != 'deleted'`,
+        parentUsers: `SELECT COUNT(*) as count FROM users WHERE role = 'parent' AND status != 'deleted'`,
+        totalCourses: `SELECT COUNT(*) as count FROM courses`,
+        publishedCourses: `SELECT COUNT(*) as count FROM courses WHERE status = 'published'`,
+        draftCourses: `SELECT COUNT(*) as count FROM courses WHERE status = 'draft'`,
+        archivedCourses: `SELECT COUNT(*) as count FROM courses WHERE status = 'archived'`,
+        totalEnrollments: `SELECT COUNT(*) as count FROM enrollments`,
+        activeEnrollments: `SELECT COUNT(*) as count FROM enrollments WHERE status = 'in_progress'`,
+        completedEnrollments: `SELECT COUNT(*) as count FROM enrollments WHERE status = 'completed'`,
+        totalRevenue: `
+            SELECT COALESCE(SUM(c.price), 0) as revenue 
+            FROM enrollments e 
+            JOIN courses c ON e.course_id = c.id 
+            WHERE e.status IN ('in_progress', 'completed')
+        `
+    };
+
+    const results = {};
+    const queryKeys = Object.keys(queries);
+    let completedQueries = 0;
+
+    queryKeys.forEach(key => {
+        db.query(queries[key], (err, result) => {
+            if (err) {
+                console.error(`Error executing ${key} query:`, err);
+                results[key] = 0;
+            } else {
+                if (key === 'totalRevenue') {
+                    results[key] = result[0].revenue || 0;
+                } else {
+                    results[key] = result[0].count || 0;
+                }
+            }
+            
+            completedQueries++;
+            
+            if (completedQueries === queryKeys.length) {
+                // All queries completed, send response
+                res.json({
+                    users: {
+                        total: results.totalUsers,
+                        admin: results.adminUsers,
+                        instructor: results.instructorUsers,
+                        student: results.studentUsers,
+                        parent: results.parentUsers
+                    },
+                    courses: {
+                        total: results.totalCourses,
+                        published: results.publishedCourses,
+                        draft: results.draftCourses,
+                        archived: results.archivedCourses
+                    },
+                    enrollments: {
+                        total: results.totalEnrollments,
+                        active: results.activeEnrollments,
+                        completed: results.completedEnrollments
+                    },
+                    revenue: {
+                        total: parseFloat(results.totalRevenue).toFixed(2)
+                    }
+                });
+            }
+        });
+    });
+});
+
+// GET DASHBOARD ANALYTICS DATA (Admin only)
+app.get('/api/admin/analytics', verifyToken, isAdmin, (req, res) => {
+    const { period = '7d' } = req.query; // 7d, 30d, 90d, 1y
+    
+    let dateFilter = '';
+    switch(period) {
+        case '7d':
+            dateFilter = 'DATE(created_at) >= DATE_SUB(CURDATE(), INTERVAL 7 DAY)';
+            break;
+        case '30d':
+            dateFilter = 'DATE(created_at) >= DATE_SUB(CURDATE(), INTERVAL 30 DAY)';
+            break;
+        case '90d':
+            dateFilter = 'DATE(created_at) >= DATE_SUB(CURDATE(), INTERVAL 90 DAY)';
+            break;
+        case '1y':
+            dateFilter = 'DATE(created_at) >= DATE_SUB(CURDATE(), INTERVAL 1 YEAR)';
+            break;
+        default:
+            dateFilter = 'DATE(created_at) >= DATE_SUB(CURDATE(), INTERVAL 7 DAY)';
+    }
+
+    const queries = {
+        newUsers: `SELECT DATE(created_at) as date, COUNT(*) as count FROM users WHERE ${dateFilter} GROUP BY DATE(created_at) ORDER BY date`,
+        newCourses: `SELECT DATE(created_at) as date, COUNT(*) as count FROM courses WHERE ${dateFilter} GROUP BY DATE(created_at) ORDER BY date`,
+        newEnrollments: `SELECT DATE(enrollment_date) as date, COUNT(*) as count FROM enrollments WHERE ${dateFilter.replace('created_at', 'enrollment_date')} GROUP BY DATE(enrollment_date) ORDER BY date`,
+        topCourses: `
+            SELECT c.title, c.price, u.name as instructor_name, COUNT(e.id) as enrollment_count
+            FROM courses c
+            LEFT JOIN enrollments e ON c.id = e.course_id
+            JOIN users u ON c.instructor_id = u.id
+            WHERE c.status = 'published'
+            GROUP BY c.id
+            ORDER BY enrollment_count DESC
+            LIMIT 10
+        `,
+        topInstructors: `
+            SELECT u.name, u.email, COUNT(c.id) as course_count, COUNT(e.id) as total_enrollments
+            FROM users u
+            LEFT JOIN courses c ON u.id = c.instructor_id
+            LEFT JOIN enrollments e ON c.id = e.course_id
+            WHERE u.role = 'instructor'
+            GROUP BY u.id
+            ORDER BY total_enrollments DESC
+            LIMIT 10
+        `
+    };
+
+    const results = {};
+    const queryKeys = Object.keys(queries);
+    let completedQueries = 0;
+
+    queryKeys.forEach(key => {
+        db.query(queries[key], (err, result) => {
+            if (err) {
+                console.error(`Error executing ${key} analytics query:`, err);
+                results[key] = [];
+            } else {
+                results[key] = result;
+            }
+            
+            completedQueries++;
+            
+            if (completedQueries === queryKeys.length) {
+                res.json(results);
+            }
+        });
+    });
+});
+
+// BULK DELETE USERS (Admin only)
+app.post('/api/admin/users/bulk-delete', verifyToken, isAdmin, [
+    body('userIds').isArray({ min: 1 }).withMessage('At least one user ID is required'),
+    body('userIds.*').isInt({ min: 1 }).withMessage('Invalid user ID')
+], (req, res) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+        return res.status(400).json({ message: 'Validation error', errors: errors.array() });
+    }
+
+    const { userIds } = req.body;
+    
+    // Check if trying to delete admin users
+    const checkAdminQuery = `SELECT id FROM users WHERE id IN (${userIds.map(() => '?').join(',')}) AND role = 'admin'`;
+    
+    db.query(checkAdminQuery, userIds, (err, adminResults) => {
+        if (err) {
+            console.error('Database error checking admin users:', err);
+            return res.status(500).json({ message: 'Failed to delete users.' });
+        }
+
+        if (adminResults.length > 0) {
+            return res.status(403).json({ message: 'Cannot delete admin accounts.' });
+        }
+
+        const deleteQuery = `UPDATE users SET status = 'deleted', updated_at = NOW() WHERE id IN (${userIds.map(() => '?').join(',')})`;
+        
+        db.query(deleteQuery, userIds, (deleteErr, result) => {
+            if (deleteErr) {
+                console.error('Database error bulk deleting users:', deleteErr);
+                return res.status(500).json({ message: 'Failed to delete users.' });
+            }
+
+            res.json({ 
+                message: `${result.affectedRows} user(s) deleted successfully.`,
+                deletedCount: result.affectedRows
+            });
+        });
+    });
+});
+
+// EXPORT USERS DATA (Admin only)
+app.get('/api/admin/users/export', verifyToken, isAdmin, (req, res) => {
+    const { format = 'json' } = req.query; // json, csv
+
+    const query = `
+        SELECT 
+            u.id,
+            u.name,
+            u.email,
+            u.role,
+            u.status,
+            u.phone,
+            u.country,
+            u.created_at,
+            u.last_login,
+            u.email_verified,
+            -- Additional stats
+            COALESCE(course_count.count, 0) as created_courses,
+            COALESCE(enrollment_count.count, 0) as enrolled_courses
+        FROM users u
+        LEFT JOIN (
+            SELECT instructor_id, COUNT(*) as count 
+            FROM courses 
+            GROUP BY instructor_id
+        ) course_count ON u.id = course_count.instructor_id
+        LEFT JOIN (
+            SELECT user_id, COUNT(*) as count 
+            FROM enrollments 
+            GROUP BY user_id
+        ) enrollment_count ON u.id = enrollment_count.user_id
+        WHERE u.status != 'deleted'
+        ORDER BY u.created_at DESC
+    `;
+
+    db.query(query, (err, users) => {
+        if (err) {
+            console.error('Database error exporting users:', err);
+            return res.status(500).json({ message: 'Failed to export users.' });
+        }
+
+        if (format === 'csv') {
+            const csv = users.map(user => {
+                return [
+                    user.id,
+                    `"${user.name}"`,
+                    `"${user.email}"`,
+                    user.role,
+                    user.status,
+                    user.phone || '',
+                    user.country || '',
+                    user.created_at,
+                    user.last_login || '',
+                    user.email_verified,
+                    user.created_courses,
+                    user.enrolled_courses
+                ].join(',');
+            });
+
+            const csvHeader = 'ID,Name,Email,Role,Status,Phone,Country,Created At,Last Login,Email Verified,Created Courses,Enrolled Courses';
+            const csvContent = [csvHeader, ...csv].join('\n');
+
+            res.setHeader('Content-Type', 'text/csv');
+            res.setHeader('Content-Disposition', 'attachment; filename=users_export.csv');
+            res.send(csvContent);
+        } else {
+            res.json({ users });
+        }
+    });
+});
+
+// EXPORT COURSES DATA (Admin only)
+app.get('/api/admin/courses/export', verifyToken, isAdmin, (req, res) => {
+    const { format = 'json' } = req.query;
+
+    const query = `
+        SELECT 
+            c.id,
+            c.title,
+            c.slug,
+            c.price,
+            c.discount_price,
+            c.status,
+            c.difficulty,
+            c.duration_hours,
+            c.language,
+            c.is_featured,
+            c.views_count,
+            c.likes_count,
+            c.created_at,
+            c.updated_at,
+            u.name as instructor_name,
+            u.email as instructor_email,
+            cat.name as category_name,
+            COALESCE(enrollment_count.count, 0) as enrolled_students,
+            COALESCE(material_count.count, 0) as materials_count
+        FROM courses c
+        JOIN users u ON c.instructor_id = u.id
+        JOIN categories cat ON c.category_id = cat.id
+        LEFT JOIN (
+            SELECT course_id, COUNT(*) as count 
+            FROM enrollments 
+            GROUP BY course_id
+        ) enrollment_count ON c.id = enrollment_count.course_id
+        LEFT JOIN (
+            SELECT course_id, COUNT(*) as count 
+            FROM course_materials 
+            GROUP BY course_id
+        ) material_count ON c.id = material_count.course_id
+        ORDER BY c.created_at DESC
+    `;
+
+    db.query(query, (err, courses) => {
+        if (err) {
+            console.error('Database error exporting courses:', err);
+            return res.status(500).json({ message: 'Failed to export courses.' });
+        }
+
+        if (format === 'csv') {
+            const csv = courses.map(course => {
+                return [
+                    course.id,
+                    `"${course.title}"`,
+                    course.slug,
+                    course.price,
+                    course.discount_price || '',
+                    course.status,
+                    course.difficulty,
+                    course.duration_hours || '',
+                    course.language,
+                    course.is_featured,
+                    course.views_count || 0,
+                    course.likes_count || 0,
+                    course.created_at,
+                    course.updated_at,
+                    `"${course.instructor_name}"`,
+                    course.instructor_email,
+                    course.category_name,
+                    course.enrolled_students,
+                    course.materials_count
+                ].join(',');
+            });
+
+            const csvHeader = 'ID,Title,Slug,Price,Discount Price,Status,Difficulty,Duration Hours,Language,Is Featured,Views,Likes,Created At,Updated At,Instructor Name,Instructor Email,Category,Enrolled Students,Materials Count';
+            const csvContent = [csvHeader, ...csv].join('\n');
+
+            res.setHeader('Content-Type', 'text/csv');
+            res.setHeader('Content-Disposition', 'attachment; filename=courses_export.csv');
+            res.send(csvContent);
+        } else {
+            res.json({ courses });
+        }
+    });
+});
+
+// SEND NOTIFICATION TO ALL USERS (Admin only)
+app.post('/api/admin/notifications/broadcast', verifyToken, isAdmin, [
+    body('title').trim().isLength({ min: 1, max: 255 }).withMessage('Title is required and must be less than 255 characters'),
+    body('message').trim().isLength({ min: 1, max: 1000 }).withMessage('Message is required and must be less than 1000 characters'),
+    body('type').optional().isIn(['info', 'warning', 'success', 'error']).withMessage('Invalid notification type'),
+    body('target_roles').optional().isArray().withMessage('Target roles must be an array')
+], (req, res) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+        return res.status(400).json({ message: 'Validation error', errors: errors.array() });
+    }
+
+    const { title, message, type = 'info', target_roles } = req.body;
+    
+    // Create notifications table if it doesn't exist
+    const createNotificationsTable = `
+        CREATE TABLE IF NOT EXISTS notifications (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            user_id INT NOT NULL,
+            title VARCHAR(255) NOT NULL,
+            message TEXT NOT NULL,
+            type ENUM('info', 'warning', 'success', 'error') DEFAULT 'info',
+            is_read BOOLEAN DEFAULT FALSE,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+            INDEX idx_user_created (user_id, created_at)
+        )
+    `;
+
+    db.query(createNotificationsTable, (tableErr) => {
+        if (tableErr) {
+            console.error('Error creating notifications table:', tableErr);
+            return res.status(500).json({ message: 'Failed to send notifications.' });
+        }
+
+        // Get target users
+        let userQuery = `SELECT id FROM users WHERE status = 'active'`;
+        let queryParams = [];
+
+        if (target_roles && target_roles.length > 0) {
+            userQuery += ` AND role IN (${target_roles.map(() => '?').join(',')})`;
+            queryParams = target_roles;
+        }
+
+        db.query(userQuery, queryParams, (userErr, users) => {
+            if (userErr) {
+                console.error('Error fetching target users:', userErr);
+                return res.status(500).json({ message: 'Failed to send notifications.' });
+            }
+
+            if (users.length === 0) {
+                return res.status(400).json({ message: 'No target users found.' });
+            }
+
+            // Insert notifications for all target users
+            const insertQuery = `
+                INSERT INTO notifications (user_id, title, message, type)
+                VALUES ?
+            `;
+
+            const notificationData = users.map(user => [user.id, title, message, type]);
+
+            db.query(insertQuery, [notificationData], (insertErr, result) => {
+                if (insertErr) {
+                    console.error('Error inserting notifications:', insertErr);
+                    return res.status(500).json({ message: 'Failed to send notifications.' });
+                }
+
+                res.json({ 
+                    message: 'Notifications sent successfully.',
+                    sent_count: result.affectedRows
+                });
+            });
+        });
+    });
+});
+
+// Also add the missing createAttendanceTable() call to your initialization
+// Add this after your existing createTables() function call:
+createAttendanceTable();
+
+// Updated server.js - Add these new endpoints after the existing course member middleware
+
+// Middleware to check if user is enrolled or instructor (already exists as isCourseMember)
+
+// Get video progress for a user in a course
+app.get('/api/courses/:courseId/progress', verifyToken, isCourseMember, (req, res) => {
+    const { courseId } = req.params;
+    const userId = req.user.id;
+
+    const query = `
+        SELECT vp.video_id, vp.progress_percentage, vp.completed
+        FROM video_progress vp
+        JOIN course_materials cm ON vp.video_id = cm.id
+        WHERE vp.user_id = ? AND cm.course_id = ? AND cm.type = 'video'
+    `;
+
+    db.query(query, [userId, courseId], (err, results) => {
+        if (err) {
+            console.error('Database error fetching video progress:', err);
+            return res.status(500).json({ message: 'Failed to fetch video progress' });
+        }
+        res.json({ progress: results });
+    });
+});
+
+// Update video progress
+app.post('/api/materials/:materialId/progress', verifyToken, (req, res) => {
+    const { materialId } = req.params;
+    const userId = req.user.id;
+    const { watched_duration_seconds } = req.body;
+
+    if (typeof watched_duration_seconds !== 'number' || watched_duration_seconds < 0) {
+        return res.status(400).json({ message: 'Invalid watched duration' });
+    }
+
+    // Get material details and verify access
+    const getMaterialQuery = `
+        SELECT cm.course_id, cm.duration_seconds, cm.type,
+               c.instructor_id, e.user_id AS enrolled_user_id
+        FROM course_materials cm
+        JOIN courses c ON cm.course_id = c.id
+        LEFT JOIN enrollments e ON c.id = e.course_id AND e.user_id = ?
+        WHERE cm.id = ? AND cm.type = 'video'
+    `;
+
+    db.query(getMaterialQuery, [userId, materialId], (err, matResults) => {
+        if (err) {
+            console.error('Database error fetching material for progress update:', err);
+            return res.status(500).json({ message: 'Failed to update progress' });
+        }
+
+        if (matResults.length === 0) {
+            return res.status(404).json({ message: 'Video not found' });
+        }
+
+        const material = matResults[0];
+        const isInstructor = req.user.role === 'instructor' && material.instructor_id === userId;
+        const isEnrolled = material.enrolled_user_id === userId;
+
+        if (!isInstructor && !isEnrolled) {
+            return res.status(403).json({ message: 'Access denied to update progress' });
+        }
+
+        const total_duration_seconds = material.duration_seconds;
+        let progress_percentage = Math.min((watched_duration_seconds / total_duration_seconds) * 100, 100);
+        const completed = progress_percentage >= 80 ? 1 : 0;
+
+        const upsertQuery = `
+            INSERT INTO video_progress (
+                user_id, video_id, watched_duration_seconds, 
+                total_duration_seconds, progress_percentage, 
+                completed, last_watched_at, watch_count
+            ) VALUES (?, ?, ?, ?, ?, ?, NOW(), 1)
+            ON DUPLICATE KEY UPDATE
+                watched_duration_seconds = GREATEST(watched_duration_seconds, VALUES(watched_duration_seconds)),
+                progress_percentage = GREATEST(progress_percentage, VALUES(progress_percentage)),
+                completed = VALUES(completed),
+                last_watched_at = NOW(),
+                watch_count = watch_count + 1
+        `;
+
+        db.query(upsertQuery, [
+            userId, materialId, watched_duration_seconds,
+            total_duration_seconds, progress_percentage, completed
+        ], (upsertErr, upsertResult) => {
+            if (upsertErr) {
+                console.error('Database error updating video progress:', upsertErr);
+                return res.status(500).json({ message: 'Failed to update progress' });
+            }
+
+            // Update course progress in enrollments if not instructor
+            if (!isInstructor && isEnrolled) {
+                const calcProgressQuery = `
+                    SELECT 
+                        (SUM(CASE WHEN vp.completed = 1 THEN 1 ELSE 0 END) / COUNT(cm.id)) * 100 AS course_progress
+                    FROM course_materials cm
+                    LEFT JOIN video_progress vp ON cm.id = vp.video_id AND vp.user_id = ?
+                    WHERE cm.course_id = ? AND cm.type = 'video'
+                    GROUP BY cm.course_id
+                `;
+
+                db.query(calcProgressQuery, [userId, material.course_id], (progErr, progResults) => {
+                    if (progErr) {
+                        console.error('Error calculating course progress:', progErr);
+                    } else {
+                        const course_progress = progResults[0]?.course_progress || 0;
+                        const updateEnrollmentQuery = `
+                            UPDATE enrollments 
+                            SET progress_percentage = ? 
+                            WHERE user_id = ? AND course_id = ?
+                        `;
+                        db.query(updateEnrollmentQuery, [course_progress, userId, material.course_id], (updateErr) => {
+                            if (updateErr) {
+                                console.error('Error updating enrollment progress:', updateErr);
+                            }
+                        });
+                    }
+                });
+            }
+
+            res.json({ 
+                message: 'Progress updated', 
+                progress_percentage, 
+                completed: !!completed 
+            });
+        });
+    });
+});
+
+// QUIZ MANAGEMENT ENDPOINTS
+// Add these after your existing endpoints in server.js
+
+// Get all quizzes for a course
+app.get('/api/courses/:courseId/quizzes', verifyToken, async (req, res) => {
+    try {
+        const { courseId } = req.params;
+        
+        // Check if user has access to this course
+        const accessQuery = `
+            SELECT * FROM courses 
+            WHERE id = ? AND (instructor_id = ? OR id IN (SELECT course_id FROM enrollments WHERE user_id = ?))
+        `;
+        
+        db.query(accessQuery, [courseId, req.user.id, req.user.id], (err, courses) => {
+            if (err) {
+                console.error('Database error checking course access:', err);
+                return res.status(500).json({ message: 'Server error' });
+            }
+            
+            if (courses.length === 0) {
+                return res.status(403).json({ message: 'Access denied' });
+            }
+
+            db.query(
+                'SELECT * FROM quizzes WHERE course_id = ? ORDER BY order_index ASC',
+                [courseId],
+                (err, quizzes) => {
+                    if (err) {
+                        console.error('Error fetching quizzes:', err);
+                        return res.status(500).json({ message: 'Server error' });
+                    }
+                    res.json(quizzes);
+                }
+            );
+        });
+    } catch (error) {
+        console.error('Error fetching quizzes:', error);
+        res.status(500).json({ message: 'Server error' });
+    }
+});
+
+// Create a new quiz
+app.post('/api/courses/:courseId/quizzes', verifyToken, isInstructor, (req, res) => {
+    try {
+        const { courseId } = req.params;
+        const { 
+            title, description, instructions, time_limit_minutes, 
+            passing_score, max_attempts, is_active, show_results, 
+            randomize_questions, randomize_options, order_index 
+        } = req.body;
+
+        // Verify course ownership
+        db.query(
+            'SELECT * FROM courses WHERE id = ? AND instructor_id = ?',
+            [courseId, req.user.id],
+            (err, courses) => {
+                if (err) {
+                    console.error('Database error:', err);
+                    return res.status(500).json({ message: 'Server error' });
+                }
+
+                if (courses.length === 0) {
+                    return res.status(403).json({ message: 'Access denied' });
+                }
+
+                const insertQuery = `
+                    INSERT INTO quizzes (
+                        course_id, title, description, instructions, time_limit_minutes, 
+                        passing_score, max_attempts, is_active, show_results, 
+                        randomize_questions, randomize_options, order_index
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                `;
+
+                db.query(insertQuery, [
+                    courseId, title, description, instructions, 
+                    time_limit_minutes || 60, passing_score || 80, max_attempts || 3, 
+                    is_active !== false, show_results !== false, 
+                    randomize_questions || false, randomize_options || false, order_index || 0
+                ], (err, result) => {
+                    if (err) {
+                        console.error('Error creating quiz:', err);
+                        return res.status(500).json({ message: 'Server error' });
+                    }
+
+                    db.query('SELECT * FROM quizzes WHERE id = ?', [result.insertId], (err, newQuiz) => {
+                        if (err) {
+                            console.error('Error fetching new quiz:', err);
+                            return res.status(500).json({ message: 'Server error' });
+                        }
+                        res.status(201).json(newQuiz[0]);
+                    });
+                });
+            }
+        );
+    } catch (error) {
+        console.error('Error creating quiz:', error);
+        res.status(500).json({ message: 'Server error' });
+    }
+});
+
+// Update a quiz
+app.put('/api/courses/:courseId/quizzes/:quizId', verifyToken, isInstructor, (req, res) => {
+    try {
+        const { courseId, quizId } = req.params;
+        const { 
+            title, description, instructions, time_limit_minutes, 
+            passing_score, max_attempts, is_active, show_results, 
+            randomize_questions, randomize_options, order_index 
+        } = req.body;
+
+        // Verify ownership
+        const verifyQuery = `
+            SELECT q.* FROM quizzes q 
+            JOIN courses c ON q.course_id = c.id 
+            WHERE q.id = ? AND q.course_id = ? AND c.instructor_id = ?
+        `;
+
+        db.query(verifyQuery, [quizId, courseId, req.user.id], (err, quizzes) => {
+            if (err) {
+                console.error('Database error:', err);
+                return res.status(500).json({ message: 'Server error' });
+            }
+
+            if (quizzes.length === 0) {
+                return res.status(403).json({ message: 'Access denied' });
+            }
+
+            const updateQuery = `
+                UPDATE quizzes SET 
+                    title = ?, description = ?, instructions = ?, time_limit_minutes = ?, 
+                    passing_score = ?, max_attempts = ?, is_active = ?, show_results = ?, 
+                    randomize_questions = ?, randomize_options = ?, order_index = ? 
+                WHERE id = ?
+            `;
+
+            db.query(updateQuery, [
+                title, description, instructions, time_limit_minutes, 
+                passing_score, max_attempts, is_active, show_results, 
+                randomize_questions, randomize_options, order_index, quizId
+            ], (err) => {
+                if (err) {
+                    console.error('Error updating quiz:', err);
+                    return res.status(500).json({ message: 'Server error' });
+                }
+
+                db.query('SELECT * FROM quizzes WHERE id = ?', [quizId], (err, updatedQuiz) => {
+                    if (err) {
+                        console.error('Error fetching updated quiz:', err);
+                        return res.status(500).json({ message: 'Server error' });
+                    }
+                    res.json(updatedQuiz[0]);
+                });
+            });
+        });
+    } catch (error) {
+        console.error('Error updating quiz:', error);
+        res.status(500).json({ message: 'Server error' });
+    }
+});
+
+// Delete a quiz
+app.delete('/api/courses/:courseId/quizzes/:quizId', verifyToken, isInstructor, (req, res) => {
+    try {
+        const { courseId, quizId } = req.params;
+
+        // Verify ownership
+        const verifyQuery = `
+            SELECT q.* FROM quizzes q 
+            JOIN courses c ON q.course_id = c.id 
+            WHERE q.id = ? AND q.course_id = ? AND c.instructor_id = ?
+        `;
+
+        db.query(verifyQuery, [quizId, courseId, req.user.id], (err, quizzes) => {
+            if (err) {
+                console.error('Database error:', err);
+                return res.status(500).json({ message: 'Server error' });
+            }
+
+            if (quizzes.length === 0) {
+                return res.status(403).json({ message: 'Access denied' });
+            }
+
+            // Delete related data first
+            db.query('DELETE FROM quiz_attempts WHERE quiz_id = ?', [quizId], (err) => {
+                if (err) console.error('Error deleting quiz attempts:', err);
+
+                db.query('DELETE FROM quiz_options WHERE question_id IN (SELECT id FROM quiz_questions WHERE quiz_id = ?)', [quizId], (err) => {
+                    if (err) console.error('Error deleting quiz options:', err);
+
+                    db.query('DELETE FROM quiz_questions WHERE quiz_id = ?', [quizId], (err) => {
+                        if (err) console.error('Error deleting quiz questions:', err);
+
+                        db.query('DELETE FROM quizzes WHERE id = ?', [quizId], (err) => {
+                            if (err) {
+                                console.error('Error deleting quiz:', err);
+                                return res.status(500).json({ message: 'Server error' });
+                            }
+                            res.json({ message: 'Quiz deleted successfully' });
+                        });
+                    });
+                });
+            });
+        });
+    } catch (error) {
+        console.error('Error deleting quiz:', error);
+        res.status(500).json({ message: 'Server error' });
+    }
+});
+
+// Get all questions for a quiz
+app.get('/api/quizzes/:quizId/questions', verifyToken, (req, res) => {
+    try {
+        const { quizId } = req.params;
+
+        // Verify access
+        const verifyQuery = `
+            SELECT q.* FROM quizzes q 
+            JOIN courses c ON q.course_id = c.id 
+            WHERE q.id = ? AND (c.instructor_id = ? OR c.id IN (SELECT course_id FROM enrollments WHERE user_id = ?))
+        `;
+
+        db.query(verifyQuery, [quizId, req.user.id, req.user.id], (err, quizzes) => {
+            if (err) {
+                console.error('Database error:', err);
+                return res.status(500).json({ message: 'Server error' });
+            }
+
+            if (quizzes.length === 0) {
+                return res.status(403).json({ message: 'Access denied' });
+            }
+
+            db.query(
+                'SELECT * FROM quiz_questions WHERE quiz_id = ? ORDER BY order_index ASC',
+                [quizId],
+                (err, questions) => {
+                    if (err) {
+                        console.error('Error fetching questions:', err);
+                        return res.status(500).json({ message: 'Server error' });
+                    }
+
+                    // Get options for each question
+                    let processedCount = 0;
+                    if (questions.length === 0) {
+                        return res.json([]);
+                    }
+
+                    questions.forEach((question, index) => {
+                        db.query(
+                            'SELECT id, option_text, is_correct, order_index FROM quiz_options WHERE question_id = ? ORDER BY order_index ASC',
+                            [question.id],
+                            (err, options) => {
+                                if (err) {
+                                    console.error('Error fetching options:', err);
+                                    questions[index].options = [];
+                                } else {
+                                    // For students, hide correct answers
+                                    if (req.user.role !== 'instructor') {
+                                        questions[index].options = options.map(opt => ({
+                                            id: opt.id,
+                                            option_text: opt.option_text,
+                                            order_index: opt.order_index
+                                        }));
+                                    } else {
+                                        questions[index].options = options;
+                                    }
+                                }
+
+                                processedCount++;
+                                if (processedCount === questions.length) {
+                                    res.json(questions);
+                                }
+                            }
+                        );
+                    });
+                }
+            );
+        });
+    } catch (error) {
+        console.error('Error fetching questions:', error);
+        res.status(500).json({ message: 'Server error' });
+    }
+});
+
+// Create a new question
+app.post('/api/quizzes/:quizId/questions', verifyToken, isInstructor, (req, res) => {
+    try {
+        const { quizId } = req.params;
+        const { question, question_type, correct_answer, explanation, points, order_index, options } = req.body;
+
+        // Verify ownership
+        const verifyQuery = `
+            SELECT q.* FROM quizzes q 
+            JOIN courses c ON q.course_id = c.id 
+            WHERE q.id = ? AND c.instructor_id = ?
+        `;
+
+        db.query(verifyQuery, [quizId, req.user.id], (err, quizzes) => {
+            if (err) {
+                console.error('Database error:', err);
+                return res.status(500).json({ message: 'Server error' });
+            }
+
+            if (quizzes.length === 0) {
+                return res.status(403).json({ message: 'Access denied' });
+            }
+
+            const insertQuery = `
+                INSERT INTO quiz_questions (quiz_id, question, question_type, correct_answer, explanation, points, order_index) 
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            `;
+
+            db.query(insertQuery, [
+                quizId, question, question_type, correct_answer, explanation, points || 10, order_index || 0
+            ], (err, result) => {
+                if (err) {
+                    console.error('Error creating question:', err);
+                    return res.status(500).json({ message: 'Server error' });
+                }
+
+                const questionId = result.insertId;
+
+                // Insert options if provided
+                if (options && options.length > 0) {
+                    let optionsInserted = 0;
+                    options.forEach((option, i) => {
+                        db.query(
+                            'INSERT INTO quiz_options (question_id, option_text, is_correct, order_index) VALUES (?, ?, ?, ?)',
+                            [questionId, option.text || option, option.text === correct_answer || option === correct_answer, i],
+                            (err) => {
+                                if (err) console.error('Error inserting option:', err);
+                                optionsInserted++;
+                                
+                                if (optionsInserted === options.length) {
+                                    // Update questions count
+                                    db.query(
+                                        'UPDATE quizzes SET questions_count = (SELECT COUNT(*) FROM quiz_questions WHERE quiz_id = ?) WHERE id = ?',
+                                        [quizId, quizId],
+                                        () => {
+                                            db.query('SELECT * FROM quiz_questions WHERE id = ?', [questionId], (err, newQuestion) => {
+                                                if (err) {
+                                                    console.error('Error fetching new question:', err);
+                                                    return res.status(500).json({ message: 'Server error' });
+                                                }
+                                                res.status(201).json(newQuestion[0]);
+                                            });
+                                        }
+                                    );
+                                }
+                            }
+                        );
+                    });
+                } else {
+                    // Update questions count
+                    db.query(
+                        'UPDATE quizzes SET questions_count = (SELECT COUNT(*) FROM quiz_questions WHERE quiz_id = ?) WHERE id = ?',
+                        [quizId, quizId],
+                        () => {
+                            db.query('SELECT * FROM quiz_questions WHERE id = ?', [questionId], (err, newQuestion) => {
+                                if (err) {
+                                    console.error('Error fetching new question:', err);
+                                    return res.status(500).json({ message: 'Server error' });
+                                }
+                                res.status(201).json(newQuestion[0]);
+                            });
+                        }
+                    );
+                }
+            });
+        });
+    } catch (error) {
+        console.error('Error creating question:', error);
+        res.status(500).json({ message: 'Server error' });
+    }
+});
+
+// Submit quiz attempt (for students)
+app.post('/api/quizzes/:quizId/submit', verifyToken, (req, res) => {
+    try {
+        const { quizId } = req.params;
+        const { answers, started_at } = req.body;
+
+        // Get quiz details
+        db.query('SELECT * FROM quizzes WHERE id = ?', [quizId], (err, quizzes) => {
+            if (err || quizzes.length === 0) {
+                console.error('Error fetching quiz:', err);
+                return res.status(404).json({ message: 'Quiz not found' });
+            }
+            const quiz = quizzes[0];
+
+            // Get all questions with correct answers
+            db.query(
+                'SELECT * FROM quiz_questions WHERE quiz_id = ?',
+                [quizId],
+                (err, questions) => {
+                    if (err) {
+                        console.error('Error fetching questions:', err);
+                        return res.status(500).json({ message: 'Server error' });
+                    }
+
+                    let correctAnswers = 0;
+                    let wrongAnswers = 0;
+                    let unanswered = 0;
+                    let totalPoints = 0;
+                    let earnedPoints = 0;
+
+                    questions.forEach(question => {
+                        totalPoints += question.points;
+                        const userAnswer = answers[question.id];
+
+                        if (!userAnswer || userAnswer.trim() === '') {
+                            unanswered++;
+                        } else {
+                            if (userAnswer === question.correct_answer) {
+                                correctAnswers++;
+                                earnedPoints += question.points;
+                            } else {
+                                wrongAnswers++;
+                            }
+                        }
+                    });
+
+                    const totalQuestions = questions.length;
+                    const percentage = totalPoints > 0 ? (earnedPoints / totalPoints) * 100 : 0;
+                    const isPassed = percentage >= quiz.passing_score;
+
+                    // Calculate time taken
+                    const startTime = new Date(started_at);
+                    const endTime = new Date();
+                    const timeTakenMinutes = Math.round((endTime - startTime) / 60000);
+
+                    // Get attempt number
+                    db.query(
+                        'SELECT MAX(attempt_number) as max_attempt FROM quiz_attempts WHERE user_id = ? AND quiz_id = ?',
+                        [req.user.id, quizId],
+                        (err, attempts) => {
+                            const attemptNumber = (attempts[0]?.max_attempt || 0) + 1;
+
+                            // Insert attempt
+                            const insertQuery = `
+                                INSERT INTO quiz_attempts (
+                                    user_id, quiz_id, attempt_number, score, percentage, total_questions, 
+                                    correct_answers, wrong_answers, unanswered, is_passed, answers, 
+                                    started_at, completed_at, time_taken_minutes, ip_address, user_agent
+                                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), ?, ?, ?)
+                            `;
+
+                            db.query(insertQuery, [
+                                req.user.id, quizId, attemptNumber, earnedPoints, percentage, totalQuestions,
+                                correctAnswers, wrongAnswers, unanswered, isPassed, JSON.stringify(answers),
+                                started_at, timeTakenMinutes, req.ip, req.get('user-agent')
+                            ], (err, result) => {
+                                if (err) {
+                                    console.error('Error submitting quiz:', err);
+                                    return res.status(500).json({ message: 'Server error' });
+                                }
+
+                                res.json({
+                                    id: result.insertId,
+                                    quiz_id: quizId,
+                                    attempt_number: attemptNumber,
+                                    score: earnedPoints,
+                                    percentage,
+                                    total_questions: totalQuestions,
+                                    correct_answers: correctAnswers,
+                                    wrong_answers: wrongAnswers,
+                                    unanswered,
+                                    passed: isPassed,
+                                    completed_at: new Date().toISOString()
+                                });
+                            });
+                        }
+                    );
+                }
+            );
+        });
+    } catch (error) {
+        console.error('Error submitting quiz:', error);
+        res.status(500).json({ message: 'Server error' });
+    }
+});
+
+// Get user quiz attempts
+app.get('/api/courses/:courseId/quiz-attempts', verifyToken, (req, res) => {
+    try {
+        const { courseId } = req.params;
+
+        const query = `
+            SELECT qa.*, q.title as quiz_title 
+            FROM quiz_attempts qa 
+            JOIN quizzes q ON qa.quiz_id = q.id 
+            WHERE qa.user_id = ? AND q.course_id = ? 
+            ORDER BY qa.completed_at DESC
+        `;
+
+        db.query(query, [req.user.id, courseId], (err, attempts) => {
+            if (err) {
+                console.error('Error fetching quiz attempts:', err);
+                return res.status(500).json({ message: 'Server error' });
+            }
+            res.json(attempts);
+        });
+    } catch (error) {
+        console.error('Error fetching quiz attempts:', error);
+        res.status(500).json({ message: 'Server error' });
+    }
+});
+
+// Example backend (Node.js/Express)
+app.delete('/api/admin/users/:id', async (req, res) => {
+    try {
+        const user = await User.findById(req.params.id);
+        if (!user) return res.status(404).json({ message: 'User not found' });
+        if (user.role === 'instructor' && await Course.exists({ instructorId: user.id })) {
+            return res.status(400).json({ message: 'Cannot delete instructor with active courses' });
+        }
+        await user.delete();
+        res.status(200).json({ message: 'User deleted successfully' });
+    } catch (error) {
+        res.status(500).json({ message: 'Server error: ' + error.message });
+    }
+});
 // Start the server
-app.listen(process.env.PORT || 5000, () => {
-    console.log(`Server running on http://localhost:${process.env.PORT || 5000}`);
+const PORT = process.env.PORT || 5000;
+app.listen(PORT, () => {
+    
+    console.log(`Server running on http://localhost:${PORT}`);
     console.log(`Uploads directory: ${uploadsDir}`);
 });
