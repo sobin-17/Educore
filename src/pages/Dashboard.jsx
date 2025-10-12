@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
+import ScheduleOnlineClassForm from './ScheduleOnlineClassForm';
+import StudentOnlineClass from './StudentOnlineClass';
 import {
     fetchUserProfile,
     fetchInstructorCourses, createCourse, updateCourse,
@@ -7,14 +9,29 @@ import {
     updateCourseMaterial, deleteCourseMaterial,
     fetchCourseChatMessages,
     sendCourseChatMessage,
-    fetchEnrolledStudents // NEW: Import the new API function
+    fetchEnrolledStudents,
+    fetchCourseQuizzes,
+    createQuiz,
+    updateQuiz,
+    deleteQuiz,
+    fetchQuizQuestions,
+    createQuizQuestion,
+    updateQuizQuestion,
+    deleteQuizQuestion,
+    submitQuizAttempt,
+    fetchUserQuizAttempts,
+    generateCertificate,
+    fetchUserCertificates
+    
 } from '../api';
 import {
     BookOpen, User, LogOut, Book,
     PlusCircle, Edit, Upload, FileText, Video, List, Share2, X, Image, Users, Trash2,
     PlayCircle, Info, CheckCircle, XCircle, Eye, MessageSquare, Send,
-    DollarSign, Clock, BarChart, EyeIcon // Added EyeIcon for viewing students
+    DollarSign, Clock, BarChart, EyeIcon,Award, Target, AlertCircle, Plus
 } from 'lucide-react';
+
+
 
 // Course Form Component (Integrated directly into Dashboard.jsx)
 const CourseForm = ({ courseToEdit, onClose, onSave, categories, loadingCategories, categoryError }) => {
@@ -202,7 +219,7 @@ const CourseForm = ({ courseToEdit, onClose, onSave, categories, loadingCategori
                         type="text"
                         id="title"
                         name="title"
-                        value={formData.title}
+                        value={formData.title || ''}
                         onChange={handleChange}
                         className="mt-1 block w-full border border-gray-300 rounded-lg shadow-sm p-3 focus:ring-blue-500 focus:border-blue-500 text-gray-900"
                         placeholder="e.g., Introduction to Data Science"
@@ -216,7 +233,7 @@ const CourseForm = ({ courseToEdit, onClose, onSave, categories, loadingCategori
                         type="text"
                         id="slug"
                         name="slug"
-                        value={formData.slug}
+                        value={formData.slug || ''}
                         onChange={handleChange}
                         className="mt-1 block w-full border border-gray-300 rounded-lg shadow-sm p-3 focus:ring-blue-500 focus:border-blue-500 text-gray-900"
                         placeholder="Auto-generated from title, or enter manually"
@@ -229,7 +246,7 @@ const CourseForm = ({ courseToEdit, onClose, onSave, categories, loadingCategori
                     <textarea
                         id="short_description"
                         name="short_description"
-                        value={formData.short_description}
+                        value={formData.short_description || ''}
                         onChange={handleChange}
                         rows="2"
                         className="mt-1 block w-full border border-gray-300 rounded-lg shadow-sm p-3 focus:ring-blue-500 focus:border-blue-500 text-gray-900"
@@ -243,7 +260,7 @@ const CourseForm = ({ courseToEdit, onClose, onSave, categories, loadingCategori
                     <textarea
                         id="description"
                         name="description"
-                        value={formData.description}
+                        value={formData.description || ''}
                         onChange={handleChange}
                         rows="4"
                         className="mt-1 block w-full border border-gray-300 rounded-lg shadow-sm p-3 focus:ring-blue-500 focus:border-blue-500 text-gray-900"
@@ -283,7 +300,7 @@ const CourseForm = ({ courseToEdit, onClose, onSave, categories, loadingCategori
                             type="number"
                             id="price"
                             name="price"
-                            value={formData.price}
+                            value={formData.price || ''}
                             onChange={handleChange}
                             step="0.01"
                             className="mt-1 block w-full border border-gray-300 rounded-lg shadow-sm p-3 focus:ring-blue-500 focus:border-blue-500 text-gray-900"
@@ -296,7 +313,7 @@ const CourseForm = ({ courseToEdit, onClose, onSave, categories, loadingCategori
                             type="number"
                             id="discount_price"
                             name="discount_price"
-                            value={formData.discount_price}
+                            value={formData.discount_price || ''}
                             onChange={handleChange}
                             step="0.01"
                             className="mt-1 block w-full border border-gray-300 rounded-lg shadow-sm p-3 focus:ring-blue-500 focus:border-blue-500 text-gray-900"
@@ -326,7 +343,7 @@ const CourseForm = ({ courseToEdit, onClose, onSave, categories, loadingCategori
                             type="number"
                             id="duration_hours"
                             name="duration_hours"
-                            value={formData.duration_hours}
+                            value={formData.duration_hours || ''}
                             onChange={handleChange}
                             step="0.1"
                             className="mt-1 block w-full border border-gray-300 rounded-lg shadow-sm p-3 focus:ring-blue-500 focus:border-blue-500 text-gray-900"
@@ -340,7 +357,7 @@ const CourseForm = ({ courseToEdit, onClose, onSave, categories, loadingCategori
                         type="text"
                         id="language"
                         name="language"
-                        value={formData.language}
+                        value={formData.language || ''}
                         onChange={handleChange}
                         className="mt-1 block w-full border border-gray-300 rounded-lg shadow-sm p-3 focus:ring-blue-500 focus:border-blue-500 text-gray-900"
                     />
@@ -352,7 +369,7 @@ const CourseForm = ({ courseToEdit, onClose, onSave, categories, loadingCategori
                     <textarea
                         id="requirements"
                         name="requirements"
-                        value={formData.requirements}
+                        value={formData.requirements || ''}
                         onChange={handleChange}
                         rows="3"
                         className="mt-1 block w-full border border-gray-300 rounded-lg shadow-sm p-3 focus:ring-blue-500 focus:border-blue-500 text-gray-900"
@@ -364,7 +381,7 @@ const CourseForm = ({ courseToEdit, onClose, onSave, categories, loadingCategori
                     <textarea
                         id="what_you_learn"
                         name="what_you_learn"
-                        value={formData.what_you_learn}
+                        value={formData.what_you_learn || ''}
                         onChange={handleChange}
                         rows="3"
                         className="mt-1 block w-full border border-gray-300 rounded-lg shadow-sm p-3 focus:ring-blue-500 focus:border-blue-500 text-gray-900"
@@ -376,7 +393,7 @@ const CourseForm = ({ courseToEdit, onClose, onSave, categories, loadingCategori
                     <textarea
                         id="target_audience"
                         name="target_audience"
-                        value={formData.target_audience}
+                        value={formData.target_audience || ''}
                         onChange={handleChange}
                         rows="2"
                         className="mt-1 block w-full border border-gray-300 rounded-lg shadow-sm p-3 focus:ring-blue-500 focus:border-blue-500 text-gray-900"
@@ -1084,6 +1101,7 @@ const ManageCourseMaterials = ({ course, onClose, onMaterialAdded, courseMateria
                     {copyMessage}
                 </div>
             )}
+            
 
             {/* Add New Material Form */}
             <div className="border border-gray-200 p-6 rounded-lg mb-8">
@@ -1095,7 +1113,7 @@ const ManageCourseMaterials = ({ course, onClose, onMaterialAdded, courseMateria
                             type="text"
                             id="materialTitle"
                             name="title"
-                            value={materialFormData.title}
+                            value={materialFormData.title || ''}
                             onChange={handleMaterialChange}
                             className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2"
                             placeholder="e.g., Lecture 1: Introduction"
@@ -1142,7 +1160,7 @@ const ManageCourseMaterials = ({ course, onClose, onMaterialAdded, courseMateria
                             <textarea
                                 id="materialContent"
                                 name="content"
-                                value={materialFormData.content}
+                                value={materialFormData.content || ''}
                                 onChange={handleMaterialChange}
                                 rows="4"
                                 className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2"
@@ -1159,7 +1177,7 @@ const ManageCourseMaterials = ({ course, onClose, onMaterialAdded, courseMateria
                                 type="number"
                                 id="duration_seconds"
                                 name="duration_seconds"
-                                value={materialFormData.duration_seconds}
+                                value={materialFormData.duration_seconds || ''}
                                 onChange={handleMaterialChange}
                                 min="0"
                                 className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2"
@@ -1175,7 +1193,7 @@ const ManageCourseMaterials = ({ course, onClose, onMaterialAdded, courseMateria
                             type="number"
                             id="order_index"
                             name="order_index"
-                            value={materialFormData.order_index}
+                            value={materialFormData.order_index || ''}
                             onChange={handleMaterialChange}
                             min="0"
                             className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2"
@@ -1217,7 +1235,7 @@ const ManageCourseMaterials = ({ course, onClose, onMaterialAdded, courseMateria
                                 type="text"
                                 id="editMaterialTitle"
                                 name="title"
-                                value={editMaterialFormData.title}
+                                value={editMaterialFormData.title || ''}
                                 onChange={handleEditMaterialChange}
                                 className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2"
                                 placeholder="e.g., Lecture 1: Introduction"
@@ -1267,7 +1285,7 @@ const ManageCourseMaterials = ({ course, onClose, onMaterialAdded, courseMateria
                                 <textarea
                                     id="editMaterialContent"
                                     name="content"
-                                    value={editMaterialFormData.content}
+                                    value={editMaterialFormData.content || ''}
                                     onChange={handleEditMaterialChange}
                                     rows="4"
                                     className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2"
@@ -1284,7 +1302,7 @@ const ManageCourseMaterials = ({ course, onClose, onMaterialAdded, courseMateria
                                     type="number"
                                     id="editDurationSeconds"
                                     name="duration_seconds"
-                                    value={editMaterialFormData.duration_seconds}
+                                    value={editMaterialFormData.duration_seconds || ''}
                                     onChange={handleEditMaterialChange}
                                     min="0"
                                     className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2"
@@ -1300,7 +1318,7 @@ const ManageCourseMaterials = ({ course, onClose, onMaterialAdded, courseMateria
                                 type="number"
                                 id="editOrderIndex"
                                 name="order_index"
-                                value={editMaterialFormData.order_index}
+                                value={editMaterialFormData.order_index || ''}
                                 onChange={handleEditMaterialChange}
                                 min="0"
                                 className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2"
@@ -1475,6 +1493,664 @@ const ManageCourseMaterials = ({ course, onClose, onMaterialAdded, courseMateria
     );
 };
 
+// NEW: Manage Quizzes Component
+const ManageQuizzes = ({ course, onClose, user }) => {
+    const [quizzes, setQuizzes] = useState([]);
+    const [loadingQuizzes, setLoadingQuizzes] = useState(false);
+    const [quizzesError, setQuizzesError] = useState('');
+    const [selectedQuiz, setSelectedQuiz] = useState(null); // For editing or viewing questions
+    const [quizFormData, setQuizFormData] = useState({
+        title: '',
+        description: '',
+        time_limit_minutes: '',
+        passing_percentage: 80, // Default to 80%
+        max_attempts: 1,
+    });
+    const [formErrors, setFormErrors] = useState({});
+    const [submitMessage, setSubmitMessage] = useState('');
+    const [isSubmitting, setIsSubmitting] = useState(false);
+
+    // Question management
+    const [questions, setQuestions] = useState([]);
+    const [loadingQuestions, setLoadingQuestions] = useState(false);
+    const [questionsError, setQuestionsError] = useState('');
+    const [selectedQuestion, setSelectedQuestion] = useState(null);
+    const [questionFormData, setQuestionFormData] = useState({
+        question: '',
+        option_a: '',
+        option_b: '',
+        option_c: '',
+        option_d: '',
+        correct_answer: 'A',
+        question_type: 'multiple_choice',
+        explanation: '',
+        points: 1,
+    });
+    const [questionFormErrors, setQuestionFormErrors] = useState({});
+    const [isSubmittingQuestion, setIsSubmittingQuestion] = useState(false);
+
+    // Delete confirmation
+    const [quizToDelete, setQuizToDelete] = useState(null);
+    const [questionToDelete, setQuestionToDelete] = useState(null);
+    const [showDeleteConfirmModal, setShowDeleteConfirmModal] = useState(false);
+
+    useEffect(() => {
+        if (course.id) {
+            loadQuizzes(course.id);
+        }
+    }, [course.id]);
+
+    const loadQuizzes = async (courseId) => {
+        setLoadingQuizzes(true);
+        setQuizzesError('');
+        try {
+            const quizzesData = await fetchCourseQuizzes(courseId);
+            setQuizzes(quizzesData || []);
+        } catch (err) {
+            setQuizzesError(err.message || 'Failed to load quizzes.');
+            setQuizzes([]);
+        } finally {
+            setLoadingQuizzes(false);
+        }
+    };
+
+    const loadQuestions = async (quizId) => {
+        setLoadingQuestions(true);
+        setQuestionsError('');
+        try {
+            const questionsData = await fetchQuizQuestions(quizId);
+            setQuestions(questionsData || []);
+        } catch (err) {
+            setQuestionsError(err.message || 'Failed to load questions.');
+            setQuestions([]);
+        } finally {
+            setLoadingQuestions(false);
+        }
+    };
+
+    const handleQuizChange = (e) => {
+        const { name, value } = e.target;
+        setQuizFormData(prev => ({ ...prev, [name]: value }));
+        setFormErrors(prev => ({ ...prev, [name]: '' }));
+    };
+
+    const handleQuestionChange = (e) => {
+        const { name, value } = e.target;
+        setQuestionFormData(prev => ({ ...prev, [name]: value }));
+        setQuestionFormErrors(prev => ({ ...prev, [name]: '' }));
+    };
+
+    const validateQuizForm = () => {
+        const errors = {};
+        if (!quizFormData.title) errors.title = 'Title is required.';
+        if (!quizFormData.time_limit_minutes || isNaN(quizFormData.time_limit_minutes) || quizFormData.time_limit_minutes <= 0) errors.time_limit_minutes = 'Valid time limit is required.';
+        if (!quizFormData.passing_percentage || isNaN(quizFormData.passing_percentage) || quizFormData.passing_percentage < 0 || quizFormData.passing_percentage > 100) errors.passing_percentage = 'Passing percentage must be between 0 and 100.';
+        setFormErrors(errors);
+        return Object.keys(errors).length === 0;
+    };
+
+    const validateQuestionForm = () => {
+        const errors = {};
+        if (!questionFormData.question) errors.question = 'Question text is required.';
+        if (!questionFormData.option_a) errors.option_a = 'Option A is required.';
+        if (!questionFormData.option_b) errors.option_b = 'Option B is required.';
+        if (!questionFormData.correct_answer) errors.correct_answer = 'Correct answer is required.';
+        if (isNaN(questionFormData.points) || questionFormData.points <= 0) errors.points = 'Points must be positive.';
+        setQuestionFormErrors(errors);
+        return Object.keys(errors).length === 0;
+    };
+
+    const handleAddQuizSubmit = async (e) => {
+        e.preventDefault();
+        if (!validateQuizForm()) return;
+
+        setIsSubmitting(true);
+        try {
+            await createQuiz(course.id, quizFormData);
+            setSubmitMessage('Quiz created successfully!');
+            setQuizFormData({ title: '', description: '', time_limit_minutes: '', passing_percentage: 80, max_attempts: 1 });
+            loadQuizzes(course.id);
+        } catch (err) {
+            setSubmitMessage(err.message || 'Failed to create quiz.');
+        } finally {
+            setIsSubmitting(false);
+        }
+    };
+
+    const handleUpdateQuizSubmit = async (e) => {
+        e.preventDefault();
+        if (!validateQuizForm()) return;
+
+        setIsSubmitting(true);
+        try {
+            await updateQuiz(course.id, selectedQuiz.id, quizFormData);
+            setSubmitMessage('Quiz updated successfully!');
+            setSelectedQuiz(null);
+            loadQuizzes(course.id);
+        } catch (err) {
+            setSubmitMessage(err.message || 'Failed to update quiz.');
+        } finally {
+            setIsSubmitting(false);
+        }
+    };
+
+    const handleEditQuizClick = (quiz) => {
+        setSelectedQuiz(quiz);
+        setQuizFormData({
+            title: quiz.title,
+            description: quiz.description || '',
+            time_limit_minutes: quiz.time_limit_minutes,
+            passing_percentage: quiz.passing_percentage,
+            max_attempts: quiz.max_attempts,
+        });
+        loadQuestions(quiz.id);
+    };
+
+    const handleDeleteQuizClick = (quiz) => {
+        setQuizToDelete(quiz);
+        setShowDeleteConfirmModal(true);
+    };
+
+    const handleDeleteQuizConfirm = async () => {
+        try {
+            await deleteQuiz(course.id, quizToDelete.id);
+            setSubmitMessage('Quiz deleted successfully!');
+            loadQuizzes(course.id);
+        } catch (err) {
+            setSubmitMessage(err.message || 'Failed to delete quiz.');
+        } finally {
+            setShowDeleteConfirmModal(false);
+            setQuizToDelete(null);
+        }
+    };
+
+    const handleAddQuestionSubmit = async (e) => {
+        e.preventDefault();
+        if (!validateQuestionForm()) return;
+
+        setIsSubmittingQuestion(true);
+        try {
+            const questionDataToSend = {
+                question: questionFormData.question,
+                question_type: questionFormData.question_type,
+                correct_answer: questionFormData.correct_answer,
+                explanation: `Options: A. ${questionFormData.option_a} B. ${questionFormData.option_b} C. ${questionFormData.option_c} D. ${questionFormData.option_d}`,
+                points: questionFormData.points,
+                order_index: questions.length + 1, // Auto increment
+            };
+            await createQuizQuestion(selectedQuiz.id, questionDataToSend);
+            setSubmitMessage('Question added successfully!');
+            setQuestionFormData({ question: '', option_a: '', option_b: '', option_c: '', option_d: '', correct_answer: 'A', question_type: 'multiple_choice', explanation: '', points: 1 });
+            loadQuestions(selectedQuiz.id);
+        } catch (err) {
+            console.error('Error creating question:', err);
+            setSubmitMessage(err.message || 'Failed to add question.');
+        } finally {
+            setIsSubmittingQuestion(false);
+        }
+    };
+
+    const handleUpdateQuestionSubmit = async (e) => {
+        e.preventDefault();
+        if (!validateQuestionForm()) return;
+
+        setIsSubmittingQuestion(true);
+        try {
+            const questionDataToSend = {
+                question: questionFormData.question,
+                question_type: questionFormData.question_type,
+                correct_answer: questionFormData.correct_answer,
+                explanation: `Options: A. ${questionFormData.option_a} B. ${questionFormData.option_b} C. ${questionFormData.option_c} D. ${questionFormData.option_d}`,
+                points: questionFormData.points,
+                order_index: selectedQuestion.order_index,
+            };
+            await updateQuizQuestion(selectedQuiz.id, selectedQuestion.id, questionDataToSend);
+            setSubmitMessage('Question updated successfully!');
+            setSelectedQuestion(null);
+            loadQuestions(selectedQuiz.id);
+        } catch (err) {
+            console.error('Error updating question:', err);
+            setSubmitMessage(err.message || 'Failed to update question.');
+        } finally {
+            setIsSubmittingQuestion(false);
+        }
+    };
+
+    const handleEditQuestionClick = (question) => {
+        // Parse explanation for options
+        const optionsMatch = question.explanation.match(/Options: A. (.*) B. (.*) C. (.*) D. (.*)/);
+        setSelectedQuestion(question);
+        setQuestionFormData({
+            question: question.question || '',
+            option_a: optionsMatch ? optionsMatch[1] : '',
+            option_b: optionsMatch ? optionsMatch[2] : '',
+            option_c: optionsMatch ? optionsMatch[3] : '',
+            option_d: optionsMatch ? optionsMatch[4] : '',
+            correct_answer: question.correct_answer || 'A',
+            question_type: question.question_type || 'multiple_choice',
+            explanation: question.explanation || '',
+            points: question.points || 1,
+        });
+    };
+
+    const handleDeleteQuestionClick = (question) => {
+        setQuestionToDelete(question);
+        setShowDeleteConfirmModal(true);
+    };
+
+    const handleDeleteQuestionConfirm = async () => {
+        try {
+            await deleteQuizQuestion(selectedQuiz.id, questionToDelete.id);
+            setSubmitMessage('Question deleted successfully!');
+            loadQuestions(selectedQuiz.id);
+        } catch (err) {
+            setSubmitMessage(err.message || 'Failed to delete question.');
+        } finally {
+            setShowDeleteConfirmModal(false);
+            setQuestionToDelete(null);
+        }
+    };
+
+    return (
+        <div className="bg-white p-8 rounded-xl shadow-lg border border-gray-100">
+            <div className="flex justify-between items-center pb-4 border-b border-gray-200 mb-6">
+                <h2 className="text-3xl font-extrabold text-gray-900">Manage Quizzes for "{course.title}"</h2>
+                <button onClick={onClose} className="text-gray-500 hover:text-gray-700 p-2 rounded-full hover:bg-gray-100 transition-colors">
+                    <X className="h-6 w-6" />
+                </button>
+            </div>
+
+            {submitMessage && (
+                <div className={`p-3 mb-4 rounded-lg text-sm ${submitMessage.includes('successfully') ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'} shadow-md`}>
+                    {submitMessage}
+                </div>
+            )}
+
+            {/* Add/Edit Quiz Form */}
+            <div className="border border-gray-200 p-6 rounded-lg mb-8">
+                <h3 className="text-2xl font-semibold text-gray-800 mb-4">{selectedQuiz ? 'Edit Quiz' : 'Add New Quiz'}</h3>
+                <form onSubmit={selectedQuiz ? handleUpdateQuizSubmit : handleAddQuizSubmit} className="space-y-4">
+                    <div>
+                        <label htmlFor="quizTitle" className="block text-sm font-medium text-gray-700">Quiz Title</label>
+                        <input
+                            type="text"
+                            id="quizTitle"
+                            name="title"
+                            value={quizFormData.title || ''}
+                            onChange={handleQuizChange}
+                            className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2"
+                        />
+                        {formErrors.title && <p className="text-red-500 text-xs mt-1">{formErrors.title}</p>}
+                    </div>
+                    <div>
+                        <label htmlFor="quizDescription" className="block text-sm font-medium text-gray-700">Description (Optional)</label>
+                        <textarea
+                            id="quizDescription"
+                            name="description"
+                            value={quizFormData.description || ''}
+                            onChange={handleQuizChange}
+                            rows="3"
+                            className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2"
+                        ></textarea>
+                    </div>
+                    <div>
+                        <label htmlFor="time_limit_minutes" className="block text-sm font-medium text-gray-700">Time Limit (Minutes)</label>
+                        <input
+                            type="number"
+                            id="time_limit_minutes"
+                            name="time_limit_minutes"
+                            value={quizFormData.time_limit_minutes || ''}
+                            onChange={handleQuizChange}
+                            min="1"
+                            className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2"
+                        />
+                        {formErrors.time_limit_minutes && <p className="text-red-500 text-xs mt-1">{formErrors.time_limit_minutes}</p>}
+                    </div>
+                    <div>
+                        <label htmlFor="passing_percentage" className="block text-sm font-medium text-gray-700">Passing Percentage (%)</label>
+                        <input
+                            type="number"
+                            id="passing_percentage"
+                            name="passing_percentage"
+                            value={quizFormData.passing_percentage || ''}
+                            onChange={handleQuizChange}
+                            min="0"
+                            max="100"
+                            className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2"
+                        />
+                        {formErrors.passing_percentage && <p className="text-red-500 text-xs mt-1">{formErrors.passing_percentage}</p>}
+                    </div>
+                    <div>
+                        <label htmlFor="max_attempts" className="block text-sm font-medium text-gray-700">Max Attempts</label>
+                        <input
+                            type="number"
+                            id="max_attempts"
+                            name="max_attempts"
+                            value={quizFormData.max_attempts || ''}
+                            onChange={handleQuizChange}
+                            min="1"
+                            className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2"
+                        />
+                    </div>
+                    <button
+                        type="submit"
+                        disabled={isSubmitting}
+                        className="w-full bg-blue-600 text-white py-2.5 rounded-lg font-semibold hover:bg-blue-700 transition-colors disabled:opacity-50"
+                    >
+                        {isSubmitting ? 'Saving...' : (selectedQuiz ? 'Update Quiz' : 'Add Quiz')}
+                    </button>
+                    {selectedQuiz && (
+                        <button
+                            type="button"
+                            onClick={() => setSelectedQuiz(null)}
+                            className="w-full bg-gray-300 text-gray-800 py-2.5 rounded-lg font-semibold hover:bg-gray-400 transition-colors mt-2"
+                        >
+                            Cancel Edit
+                        </button>
+                    )}
+                </form>
+            </div>
+
+            {/* Existing Quizzes List */}
+            <h3 className="text-2xl font-extrabold text-gray-900 mb-4">Existing Quizzes</h3>
+            {loadingQuizzes ? (
+                <p className="text-gray-600">Loading quizzes...</p>
+            ) : quizzesError ? (
+                <p className="text-red-600">{quizzesError}</p>
+            ) : quizzes.length === 0 ? (
+                <p className="text-gray-600">No quizzes added to this course yet.</p>
+            ) : (
+                <ul className="space-y-4">
+                    {quizzes.map(quiz => (
+                        <li key={quiz.id} className="border border-gray-200 rounded-lg p-4 shadow-sm bg-gray-50">
+                            <div className="flex justify-between items-center">
+                                <div>
+                                    <p className="font-semibold text-gray-800">{quiz.title}</p>
+                                    <p className="text-sm text-gray-600">{quiz.description}</p>
+                                    <p className="text-sm text-gray-600">Time Limit: {quiz.time_limit_minutes} min | Passing: {quiz.passing_percentage}% | Attempts: {quiz.max_attempts}</p>
+                                </div>
+                                <div className="flex space-x-2">
+                                    <button onClick={() => handleEditQuizClick(quiz)} className="p-2 bg-yellow-500 text-white rounded-md hover:bg-yellow-600">
+                                        <Edit className="h-4 w-4" />
+                                    </button>
+                                    <button onClick={() => handleDeleteQuizClick(quiz)} className="p-2 bg-red-500 text-white rounded-md hover:bg-red-600">
+                                        <Trash2 className="h-4 w-4" />
+                                    </button>
+                                </div>
+                            </div>
+                            {selectedQuiz && selectedQuiz.id === quiz.id && (
+                                <div className="mt-4 border-t pt-4">
+                                    <h4 className="text-xl font-semibold mb-2">Manage Questions</h4>
+                                    {/* Add Question Form */}
+                                    <form onSubmit={selectedQuestion ? handleUpdateQuestionSubmit : handleAddQuestionSubmit} className="space-y-4 mb-6">
+                                        <div>
+                                            <label htmlFor="question" className="block text-sm font-medium text-gray-700">Question Text</label>
+                                            <input
+                                                type="text"
+                                                id="question"
+                                                name="question"
+                                                value={questionFormData.question || ''}
+                                                onChange={handleQuestionChange}
+                                                className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2"
+                                            />
+                                            {questionFormErrors.question && <p className="text-red-500 text-xs mt-1">{questionFormErrors.question}</p>}
+                                        </div>
+                                        <div>
+                                            <label htmlFor="option_a" className="block text-sm font-medium text-gray-700">Option A</label>
+                                            <input
+                                                type="text"
+                                                id="option_a"
+                                                name="option_a"
+                                                value={questionFormData.option_a || ''}
+                                                onChange={handleQuestionChange}
+                                                className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2"
+                                            />
+                                            {questionFormErrors.option_a && <p className="text-red-500 text-xs mt-1">{questionFormErrors.option_a}</p>}
+                                        </div>
+                                        <div>
+                                            <label htmlFor="option_b" className="block text-sm font-medium text-gray-700">Option B</label>
+                                            <input
+                                                type="text"
+                                                id="option_b"
+                                                name="option_b"
+                                                value={questionFormData.option_b || ''}
+                                                onChange={handleQuestionChange}
+                                                className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2"
+                                            />
+                                            {questionFormErrors.option_b && <p className="text-red-500 text-xs mt-1">{questionFormErrors.option_b}</p>}
+                                        </div>
+                                        <div>
+                                            <label htmlFor="option_c" className="block text-sm font-medium text-gray-700">Option C (Optional)</label>
+                                            <input
+                                                type="text"
+                                                id="option_c"
+                                                name="option_c"
+                                                value={questionFormData.option_c || ''}
+                                                onChange={handleQuestionChange}
+                                                className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label htmlFor="option_d" className="block text-sm font-medium text-gray-700">Option D (Optional)</label>
+                                            <input
+                                                type="text"
+                                                id="option_d"
+                                                name="option_d"
+                                                value={questionFormData.option_d || ''}
+                                                onChange={handleQuestionChange}
+                                                className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label htmlFor="correct_answer" className="block text-sm font-medium text-gray-700">Correct Option</label>
+                                            <select
+                                                id="correct_answer"
+                                                name="correct_answer"
+                                                value={questionFormData.correct_answer}
+                                                onChange={handleQuestionChange}
+                                                className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2"
+                                            >
+                                                <option value="A">A</option>
+                                                <option value="B">B</option>
+                                                <option value="C">C</option>
+                                                <option value="D">D</option>
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <label htmlFor="explanation" className="block text-sm font-medium text-gray-700">Explanation (Optional)</label>
+                                            <textarea
+                                                id="explanation"
+                                                name="explanation"
+                                                value={questionFormData.explanation || ''}
+                                                onChange={handleQuestionChange}
+                                                rows="2"
+                                                className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2"
+                                            ></textarea>
+                                        </div>
+                                        <div>
+                                            <label htmlFor="points" className="block text-sm font-medium text-gray-700">Points</label>
+                                            <input
+                                                type="number"
+                                                id="points"
+                                                name="points"
+                                                value={questionFormData.points || ''}
+                                                onChange={handleQuestionChange}
+                                                min="1"
+                                                className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2"
+                                            />
+                                            {questionFormErrors.points && <p className="text-red-500 text-xs mt-1">{questionFormErrors.points}</p>}
+                                        </div>
+                                        <button
+                                            type="submit"
+                                            disabled={isSubmittingQuestion}
+                                            className="w-full bg-green-600 text-white py-2 rounded-lg font-semibold hover:bg-green-700 transition-colors disabled:opacity-50"
+                                        >
+                                            {isSubmittingQuestion ? 'Saving...' : (selectedQuestion ? 'Update Question' : 'Add Question')}
+                                        </button>
+                                        {selectedQuestion && (
+                                            <button
+                                                type="button"
+                                                onClick={() => setSelectedQuestion(null)}
+                                                className="w-full bg-gray-300 text-gray-800 py-2 rounded-lg font-semibold hover:bg-gray-400 transition-colors mt-2"
+                                            >
+                                                Cancel Edit
+                                            </button>
+                                        )}
+                                    </form>
+
+                                    {/* Existing Questions List */}
+                                    <h5 className="text-lg font-semibold mb-2">Existing Questions</h5>
+                                    {loadingQuestions ? (
+                                        <p>Loading questions...</p>
+                                    ) : questionsError ? (
+                                        <p className="text-red-600">{questionsError}</p>
+                                    ) : questions.length === 0 ? (
+                                        <p>No questions added yet.</p>
+                                    ) : (
+                                        <ul className="space-y-2">
+                                            {questions.map(question => (
+                                                <li key={question.id} className="border p-2 rounded-md">
+                                                    <p>{question.question}</p>
+                                                    <p className="text-sm text-gray-600">Correct: {question.correct_answer}</p>
+                                                    <div className="flex space-x-2 mt-1">
+                                                        <button onClick={() => handleEditQuestionClick(question)} className="text-yellow-600 hover:underline">Edit</button>
+                                                        <button onClick={() => handleDeleteQuestionClick(question)} className="text-red-600 hover:underline">Delete</button>
+                                                    </div>
+                                                </li>
+                                            ))}
+                                        </ul>
+                                    )}
+                                </div>
+                            )}
+                        </li>
+                    ))}
+                </ul>
+            )}
+
+            <CustomModal
+                isOpen={showDeleteConfirmModal}
+                title="Confirm Deletion"
+                message={`Are you sure you want to delete this ${quizToDelete ? 'quiz' : 'question'}? This action cannot be undone.`}
+                onConfirm={quizToDelete ? handleDeleteQuizConfirm : handleDeleteQuestionConfirm}
+                onCancel={() => setShowDeleteConfirmModal(false)}
+            />
+        </div>
+    );
+};
+
+// NEW: TakeQuiz Component updated for parsing options from explanation
+const TakeQuiz = ({ quiz, onSubmit }) => {
+    const [answers, setAnswers] = useState({});
+    const [startedAt, setStartedAt] = useState(new Date().toISOString());
+    const [timeRemaining, setTimeRemaining] = useState(quiz.time_limit_minutes * 60);
+    const [submitMessage, setSubmitMessage] = useState('');
+
+    useEffect(() => {
+        const timer = setInterval(() => {
+            setTimeRemaining(prev => {
+                if (prev <= 0) {
+                    clearInterval(timer);
+                    handleSubmit();
+                    return 0;
+                }
+                return prev - 1;
+            });
+        }, 1000);
+
+        return () => clearInterval(timer);
+    }, []);
+
+    const handleAnswerChange = (questionId, answer) => {
+        setAnswers(prev => ({ ...prev, [questionId]: answer }));
+    };
+
+    const handleSubmit = async () => {
+        try {
+            const results = await submitQuizAttempt(quiz.id, answers, startedAt);
+            onSubmit(results);
+        } catch (err) {
+            setSubmitMessage('Failed to submit quiz.');
+        }
+    };
+
+    const parseOptions = (explanation) => {
+        if (!explanation.startsWith('Options: ')) return [];
+        const optionsStr = explanation.substring(9);
+        const options = optionsStr.split(/ [A-D]\. /).map((opt, index) => ({
+            letter: String.fromCharCode(65 + index),
+            text: opt.trim(),
+        }));
+        return options;
+    };
+
+    return (
+        <div className="bg-white p-6 rounded-lg shadow-md">
+            <h3 className="text-2xl font-bold mb-4">{quiz.title}</h3>
+            <p>Time Remaining: {Math.floor(timeRemaining / 60)}:{timeRemaining % 60 < 10 ? '0' : ''}{timeRemaining % 60}</p>
+            {quiz.questions.map(question => {
+                const options = parseOptions(question.explanation);
+                return (
+                    <div key={question.id} className="mb-4">
+                        <p className="font-semibold">{question.question}</p>
+                        <div className="space-y-2">
+                            {options.map(opt => (
+                                <label key={opt.letter}>
+                                    <input type="radio" name={`q${question.id}`} value={opt.letter} onChange={() => handleAnswerChange(question.id, opt.letter)} />
+                                    {opt.text}
+                                </label>
+                            ))}
+                        </div>
+                    </div>
+                );
+            })}
+            <button onClick={handleSubmit} className="bg-blue-600 text-white py-2 px-4 rounded-lg">Submit Quiz</button>
+            {submitMessage && <p className="text-red-600 mt-2">{submitMessage}</p>}
+        </div>
+    );
+};
+
+// NEW: Certificates Component for Students
+const Certificates = ({ user }) => {
+    const [certificates, setCertificates] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState('');
+
+    useEffect(() => {
+        const loadCertificates = async () => {
+            try {
+                const certs = await fetchUserCertificates(user.id);
+                setCertificates(certs);
+            } catch (err) {
+                setError('Failed to load certificates.');
+            } finally {
+                setLoading(false);
+            }
+        };
+        loadCertificates();
+    }, [user.id]);
+
+    if (loading) return <p>Loading certificates...</p>;
+    if (error) return <p className="text-red-600">{error}</p>;
+
+    return (
+        <div>
+            <h3 className="text-2xl font-bold mb-4">My Certificates</h3>
+            {certificates.length === 0 ? (
+                <p>No certificates earned yet.</p>
+            ) : (
+                <ul className="space-y-4">
+                    {certificates.map(cert => (
+                        <li key={cert.id} className="border p-4 rounded-md">
+                            <p>Course: {cert.course_title}</p>
+                            <p>Issued: {new Date(cert.issued_at).toLocaleDateString()}</p>
+                            <button onClick={() => downloadCertificate(cert.course_id, user.id)} className="text-blue-600 hover:underline">Download</button>
+                        </li>
+                    ))}
+                </ul>
+            )}
+        </div>
+    );
+};
 
 const Dashboard = () => {
     const navigate = useNavigate();
@@ -1486,6 +2162,7 @@ const Dashboard = () => {
     const [loading, setLoading] = useState(true);
     const [loadingCategories, setLoadingCategories] = useState(true);
     const [categoryError, setCategoryError] = useState('');
+    //const [courses, setCourses] = useState([]);
 
     const [courseToEdit, setCourseToEdit] = useState(null); // State to pass to CourseForm for editing
     const [selectedCourseForMaterials, setSelectedCourseForMaterials] = useState(null); // Course for material management
@@ -1499,7 +2176,23 @@ const Dashboard = () => {
     const [enrolledStudentsList, setEnrolledStudentsList] = useState([]);
     const [loadingEnrolledStudents, setLoadingEnrolledStudents] = useState(false);
     const [enrolledStudentsError, setEnrolledStudentsError] = useState('');
-    const [selectedCourseForStudents, setSelectedCourseForStudents] = useState(null); // To hold the course whose students are being viewed
+    const [selectedCourseForStudents, setSelectedCourseForStudents] = useState(null);
+     // To hold the course whose students are being viewed
+     const [showScheduleForm, setShowScheduleForm] = useState(false);
+
+     const handleScheduleClassClick = () => {
+         setShowScheduleForm(true);
+     }; 
+
+     // NEW: Quiz Management States
+     const [selectedCourseForQuizzes, setSelectedCourseForQuizzes] = useState(null);
+
+     // NEW: For student quiz taking
+     const [selectedQuizForTaking, setSelectedQuizForTaking] = useState(null);
+     const [quizAttempts, setQuizAttempts] = useState([]);
+
+     // NEW: Certificates
+     const [showCertificates, setShowCertificates] = useState(false);
 
 
     // Main effect for fetching user profile and initial course data
@@ -1582,7 +2275,6 @@ const Dashboard = () => {
         }
     }, []);
 
-
     const handleLogout = () => {
         localStorage.removeItem('token');
         localStorage.removeItem('user');
@@ -1651,6 +2343,44 @@ const Dashboard = () => {
         setEnrolledStudentsError('');
     };
 
+    // NEW: Handle Manage Quizzes
+    const handleManageQuizzes = (course) => {
+        setSelectedCourseForQuizzes(course);
+        setSelectedTab('manage-quizzes');
+    };
+
+    // NEW: For student - Load quiz attempts for a course
+    const loadQuizAttempts = async (courseId) => {
+        try {
+            const attempts = await fetchUserQuizAttempts(courseId);
+            setQuizAttempts(attempts);
+        } catch (err) {
+            console.error('Error loading quiz attempts:', err);
+        }
+    };
+
+    // NEW: Handle taking quiz
+    const handleTakeQuiz = (quiz) => {
+        setSelectedQuizForTaking(quiz);
+    };
+
+    // NEW: Handle quiz submission
+    const handleQuizSubmit = async (results) => {
+        if (results.score_percentage >= 80) {
+            try {
+                await generateCertificate(results.course_id);
+                alert('Congratulations! Certificate generated.');
+            } catch (err) {
+                console.error('Error generating certificate:', err);
+            }
+        }
+        setSelectedQuizForTaking(null);
+    };
+
+    // NEW: Toggle certificates view
+    const handleViewCertificates = () => {
+        setShowCertificates(true);
+    };
 
     if (loading) {
         return (
@@ -1734,6 +2464,13 @@ const Dashboard = () => {
                             >
                                 <PlusCircle className="h-6 w-6 mr-2" /> Create Course
                             </button>
+                            <button
+        onClick={handleScheduleClassClick}
+        className="flex items-center px-4 py-2 bg-blue-500 text-white rounded-lg shadow hover:bg-blue-600 transition-colors"
+    >
+        <Video className="w-5 h-5 mr-2" />
+        Schedule Online Class
+    </button>
                             {/* Removed the 'Enrolled Students Summary' tab as it's now integrated per-course */}
                             {/* <button
                                 onClick={() => setSelectedTab('enrolled-students-summary')}
@@ -1742,7 +2479,21 @@ const Dashboard = () => {
                             >
                                 <Users className="h-6 w-6 mr-2" /> Enrolled Students
                             </button> */}
+
+{showScheduleForm && (
+            <div className="fixed inset-0 bg-gray-600 bg-opacity-75 flex items-center justify-center z-50 p-4">
+                <div className="bg-white rounded-xl shadow-2xl p-8 w-full max-w-2xl mx-auto">
+                    <ScheduleOnlineClassForm
+                        // Assuming you have a `courses` state in your Dashboard component
+                        // courses={courses} 
+                        onClose={() => setShowScheduleForm(false)}
+                        onSave={() => setShowScheduleForm(false)}
+                    />
+                </div>
+            </div>
+        )}
                         </div>
+                        
                     )}
 
                     {/* Content based on selected tab */}
@@ -1816,7 +2567,14 @@ const Dashboard = () => {
                                                 >
                                                     <Upload className="h-4 w-4 mr-1" /> Materials
                                                 </button>
+                                                
                                                 {/* NEW: View Enrolled Students Button */}
+                                                <button
+                                                    onClick={() => handleManageQuizzes(course)}
+                                                    className="flex items-center justify-center px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors text-sm"
+                                                >
+                                                    <Award className="h-4 w-4 mr-1" /> Quizzes
+                                                </button>
                                                 <button
                                                     onClick={() => handleViewEnrolledStudents(course)}
                                                     className="flex items-center justify-center px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors text-sm"
@@ -1855,34 +2613,13 @@ const Dashboard = () => {
                         />
                     )}
 
-                    {/* The general "Enrolled Students Summary" tab is no longer needed as the view is per-course */}
-                    {/* {user.role === 'instructor' && selectedTab === 'enrolled-students-summary' && (
-                        <div className="bg-white rounded-lg shadow-lg p-6 md:p-8">
-                            <h3 className="text-2xl font-bold text-gray-900 mb-4">Enrolled Students Summary</h3>
-                            {instructorCourses.length === 0 ? (
-                                <p className="text-gray-600">You have no courses to display enrollment data for.</p>
-                            ) : (
-                                <div className="space-y-6">
-                                    {instructorCourses.map(course => (
-                                        <div key={course.id} className="border border-gray-200 rounded-lg p-4 flex flex-col md:flex-row items-start md:items-center shadow-sm">
-                                            {course.thumbnail_url && (
-                                                <img src={course.thumbnail_url} alt={course.title} className="w-full md:w-24 h-16 md:h-16 object-cover rounded-md mb-4 md:mb-0 md:mr-4" />
-                                            )}
-                                            <div className="flex-grow">
-                                                <h4 className="text-xl font-semibold text-gray-800">{course.title}</h4>
-                                                <p className="text-gray-600 text-sm">{course.short_description}</p>
-                                            </div>
-                                            <div className="flex items-center text-blue-600 font-bold text-lg">
-                                                <Users className="h-6 w-6 mr-2" />
-                                                <span>{course.enrolled_students_count || 0} Students Enrolled</span>
-                                            </div>
-                                        </div>
-                                    ))}
-                                </div>
-                            )}
-                        </div>
-                    )} */}
-
+                    {user.role === 'instructor' && selectedTab === 'manage-quizzes' && selectedCourseForQuizzes && (
+                        <ManageQuizzes
+                            course={selectedCourseForQuizzes}
+                            onClose={() => setSelectedTab('my-courses')}
+                            user={user}
+                        />
+                    )}
 
                     {user.role === 'student' && (
                         <div className="bg-white rounded-lg shadow-lg p-6 md:p-8">
@@ -1911,16 +2648,42 @@ const Dashboard = () => {
                                                 >
                                                     <PlayCircle className="h-4 w-4 mr-1" /> Continue Learning
                                                 </Link>
+                                                {/* NEW: Take Quiz Button - Assuming quizzes are enabled after course completion */}
+                                                <button onClick={() => loadQuizAttempts(course.id)} className="flex items-center justify-center px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 text-sm">
+                                                    <Award className="h-4 w-4 mr-1" /> Quizzes
+                                                </button>
                                             </div>
                                         </div>
                                     ))}
                                 </div>
+                                
                             )}
+                            <button
+            onClick={() => setSelectedTab('live-classes')}
+            className={`flex items-center justify-center p-4 rounded-lg shadow-md text-lg font-semibold transition-all duration-200
+                        ${selectedTab === 'live-classes' ? 'bg-blue-600 text-white' : 'bg-white text-blue-700 hover:bg-blue-50'}`}
+        >
+            <Video className="h-6 w-6 mr-2" /> Live Classes
+        </button>
+        <button onClick={handleViewCertificates} className="mt-4 flex items-center justify-center p-4 rounded-lg shadow-md text-lg font-semibold bg-white text-blue-700 hover:bg-blue-50">
+            <Award className="h-6 w-6 mr-2" /> Certificates
+        </button>
                         </div>
+                        
                     )}
                 </div>
             </div>
+            {user.role === 'student' && selectedTab === 'live-classes' && (
+    <StudentOnlineClass user={user} />
+)}
 
+{selectedQuizForTaking && (
+    <TakeQuiz quiz={selectedQuizForTaking} onSubmit={handleQuizSubmit} />
+)}
+
+{showCertificates && (
+    <Certificates user={user} />
+)}
             {/* NEW: Enrolled Students Modal */}
             <EnrolledStudentsModal
                 isOpen={showEnrolledStudentsModal}
@@ -1933,5 +2696,7 @@ const Dashboard = () => {
         </div>
     );
 };
+
+
 
 export default Dashboard;

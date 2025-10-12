@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'; // Import Link for navigation
 import { BookOpen, Users, Award, Star, Play, ChevronRight, Menu, X, User, LogOut } from 'lucide-react';
 import { fetchCourses } from '../api'; // Corrected path: Assuming api.js is in the src directory
 
+
 const HomePage = () => {
     const [isMenuOpen, setIsMenuOpen] = useState(false);
     const [user, setUser] = useState(null);
@@ -60,7 +61,7 @@ const HomePage = () => {
                         <div className="flex items-center">
                             <Link to="/" className="inline-flex items-center text-blue-600 hover:text-blue-800 transition-colors duration-200">
                                 <BookOpen className="h-8 w-8" />
-                                <span className="ml-2 text-xl font-bold text-gray-900">EduPlatform</span>
+                                <span className="ml-2 text-xl font-bold text-gray-900">EduCore</span>
                             </Link>
                         </div>
 
@@ -68,7 +69,7 @@ const HomePage = () => {
                         <nav className="hidden md:flex items-center space-x-8">
                             <Link to="/" className="text-gray-700 hover:text-blue-600 font-medium">Home</Link>{/* Hero Section */}
                             <Link to="/course-card" className="text-gray-700 hover:text-blue-600 font-medium">Courses</Link> {/* Placeholder route */}
-                            <Link to="/profile-settings" className="text-gray-700 hover:text-blue-600 font-medium">About</Link> {/* Placeholder route */}
+                            <Link to="/about" className="text-gray-700 hover:text-blue-600 font-medium">About</Link> {/* Placeholder route */}
                             <Link to="/contact" className="text-gray-700 hover:text-blue-600 font-medium">Contact</Link> {/* Placeholder route */}
                         </nav>
 
@@ -258,7 +259,9 @@ const HomePage = () => {
                                             <div className="flex items-center">
                                                 <Star className="h-4 w-4 text-yellow-400 fill-current" />
                                                 <span className="ml-1 text-sm text-gray-600">
-                                                    {course.average_rating ? course.average_rating.toFixed(1) : 'N/A'} ({course.review_count || 0} reviews)
+                                                    {course.average_rating && !isNaN(Number(course.average_rating)) 
+                                                        ? Number(course.average_rating).toFixed(1) 
+                                                        : 'N/A'} ({course.review_count || 0} reviews)
                                                 </span>
                                             </div>
                                             <span className="text-2xl font-bold text-blue-600">
