@@ -165,7 +165,7 @@ const CourseCard = () => {
                         <div className="flex items-center">
                             <Link to="/" className="inline-flex items-center text-blue-600 hover:text-blue-800 transition-colors duration-200">
                                 <BookOpen className="h-8 w-8" />
-                                <span className="ml-2 text-xl font-bold text-gray-900">EduPlatform</span>
+                                <span className="ml-2 text-xl font-bold text-gray-900">EduCore</span>
                             </Link>
                         </div>
 

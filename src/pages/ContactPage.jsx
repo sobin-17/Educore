@@ -87,7 +87,7 @@ const ContactPage = () => {
             </div>
             <div className="flex items-center space-x-3">
               <MapPin className="text-blue-600 h-6 w-6" />
-              <span className="text-gray-700">Educore Learning, Gandhinagar 2nd Street, Kottayam</span>
+              <span className="text-gray-700">EduCore Learning, Gandhinagar 2nd Street, Kottayam</span>
             </div>
           </div>
           <iframe

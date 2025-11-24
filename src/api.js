@@ -3,7 +3,7 @@ import axios from 'axios';
 // IMPORTANT: This URL MUST match the port your Express backend is running on.
 // If your backend console says "Server running on http://localhost:5000", then this is correct.
 // If it says a different port (e.g., 5001), you must change this value.
-const API_BASE_URL = 'http://localhost:5000';
+const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://localhost:5000';
 
 /**
  * Sets the authorization header for Axios requests.
@@ -26,9 +26,7 @@ axios.interceptors.request.use(
         }
         return config;
     },
-    (error) => {
-        return Promise.reject(error);
-    }
+    (error) => Promise.reject(error)
 );
 
 /**
@@ -42,25 +40,56 @@ axios.interceptors.request.use(
 export const loginUser = async (credentials) => {
     try {
         const response = await axios.post(`${API_BASE_URL}/auth/login`, credentials);
-        // The backend sends back { message, token, user }
         if (response.data.token) {
             localStorage.setItem('token', response.data.token);
-            localStorage.setItem('user', JSON.stringify(response.data.user)); // Store user data
+            localStorage.setItem('user', JSON.stringify(response.data.user));
             setAuthToken(response.data.token);
         }
         return response.data;
     } catch (error) {
-        // Axios wraps the error response in error.response
-        if (error.response) {
-            console.error('Login error response:', error.response.data);
-            throw error;
-        } else if (error.request) {
-            console.error('Login error request:', error.request);
-            throw new Error('No response from server. Please check your network connection or server status.');
-        } else {
-            console.error('Login error message:', error.message);
-            throw new Error('An unexpected error occurred during login.');
+        console.error('Login error response:', error.response?.data);
+        throw new Error(
+            error.response?.data?.message ||
+            error.request ? 'No response from server. Please check your network connection or server status.' :
+            'An unexpected error occurred during login.'
+        );
+    }
+};
+
+/**
+ * Admin login function (separate from regular login).
+ * @param {string} email - Admin email.
+ * @param {string} password - Admin password.
+ * @returns {Promise<object>} A promise that resolves with admin token and user data.
+ * @throws {Error} Throws an error if admin login fails.
+ */
+export const adminLogin = async (email, password) => {
+    try {
+        const response = await axios.post(`${API_BASE_URL}/api/auth/admin-login`, { email, password });
+        if (response.data.token) {
+            localStorage.setItem('token', response.data.token);
+            localStorage.setItem('user', JSON.stringify(response.data.user));
+            setAuthToken(response.data.token);
         }
+        return response.data;
+    } catch (error) {
+        console.error('Admin login error:', error.response?.data);
+        throw new Error(error.response?.data?.message || 'Failed to log in as admin');
+    }
+};
+
+/**
+ * Logs out the current user by clearing authentication data.
+ * @returns {void}
+ */
+export const logoutUser = async () => {
+    try {
+        localStorage.removeItem('token');
+        localStorage.removeItem('user');
+        setAuthToken(null);
+    } catch (error) {
+        console.error('Error during logout:', error);
+        throw new Error('Failed to log out');
     }
 };
 
@@ -73,22 +102,16 @@ export const loginUser = async (credentials) => {
 export const registerUser = async (userData) => {
     try {
         const response = await axios.post(`${API_BASE_URL}/auth/register`, userData, {
-            headers: {
-                'Content-Type': 'multipart/form-data',
-            },
+            headers: { 'Content-Type': 'multipart/form-data' },
         });
         return response.data;
     } catch (error) {
-        if (error.response) {
-            console.error('Registration error response:', error.response.data);
-            throw error;
-        } else if (error.request) {
-            console.error('Registration error request:', error.request);
-            throw new Error('No response from server. Please check your network connection or server status.');
-        } else {
-            console.error('Registration error message:', error.message);
-            throw new Error('An unexpected error occurred during registration.');
-        }
+        console.error('Registration error response:', error.response?.data);
+        throw new Error(
+            error.response?.data?.message ||
+            error.request ? 'No response from server. Please check your network connection or server status.' :
+            'An unexpected error occurred during registration.'
+        );
     }
 };
 
@@ -102,8 +125,8 @@ export const fetchUserProfile = async () => {
         const response = await axios.get(`${API_BASE_URL}/auth/profile`);
         return response.data.user;
     } catch (error) {
-        console.error('Error fetching user profile:', error);
-        throw error;
+        console.error('Error fetching user profile:', error.response?.data);
+        throw new Error(error.response?.data?.message || 'Failed to fetch user profile');
     }
 };
 
@@ -116,20 +139,17 @@ export const fetchUserProfile = async () => {
 export const updateProfile = async (updateData) => {
     try {
         const token = localStorage.getItem('token');
-        if (!token) {
-            throw new Error('Authentication token not found. Please log in.');
-        }
+        if (!token) throw new Error('Authentication token not found. Please log in.');
         const response = await axios.put(`${API_BASE_URL}/auth/profile`, updateData, {
             headers: {
                 Authorization: `Bearer ${token}`,
                 'Content-Type': 'multipart/form-data',
             },
         });
-        // Corrected line: Return the nested user object from the response data.
         return response.data.user;
     } catch (error) {
-        console.error('Error updating profile:', error);
-        throw error;
+        console.error('Error updating profile:', error.response?.data);
+        throw new Error(error.response?.data?.message || 'Failed to update profile');
     }
 };
 
@@ -143,8 +163,75 @@ export const fetchCategories = async () => {
         const response = await axios.get(`${API_BASE_URL}/api/categories`);
         return response.data.categories;
     } catch (error) {
-        console.error('Error fetching categories:', error);
-        throw error;
+        console.error('Error fetching categories:', error.response?.data);
+        throw new Error(error.response?.data?.message || 'Failed to fetch categories');
+    }
+};
+
+/**
+ * Creates a new category (admin only).
+ * @param {object} categoryData - Object containing category details (name, description, etc.).
+ * @returns {Promise<object>} A promise that resolves with the created category data.
+ * @throws {Error} Throws an error if creation fails.
+ */
+export const createCategory = async (categoryData) => {
+    try {
+        const token = localStorage.getItem('token');
+        if (!token) throw new Error('Authentication token not found. Please log in.');
+        const response = await axios.post(`${API_BASE_URL}/api/admin/categories`, categoryData, {
+            headers: {
+                Authorization: `Bearer ${token}`,
+                'Content-Type': 'application/json',
+            },
+        });
+        return response.data;
+    } catch (error) {
+        console.error('Error creating category:', error.response?.data);
+        throw new Error(error.response?.data?.message || 'Failed to create category');
+    }
+};
+
+/**
+ * Updates a category (admin only).
+ * @param {string} categoryId - The ID of the category to update.
+ * @param {object} updateData - Object containing updated category details.
+ * @returns {Promise<object>} A promise that resolves with the updated category data.
+ * @throws {Error} Throws an error if update fails.
+ */
+export const updateCategory = async (categoryId, updateData) => {
+    try {
+        const token = localStorage.getItem('token');
+        if (!token) throw new Error('Authentication token not found. Please log in.');
+        const response = await axios.put(`${API_BASE_URL}/api/admin/categories/${categoryId}`, updateData, {
+            headers: {
+                Authorization: `Bearer ${token}`,
+                'Content-Type': 'application/json',
+            },
+        });
+        return response.data;
+    } catch (error) {
+        console.error(`Error updating category ${categoryId}:`, error.response?.data);
+        throw new Error(error.response?.data?.message || 'Failed to update category');
+    }
+};
+
+/**
+ * Deletes a category (admin only).
+ * @param {string} categoryId - The ID of the category to delete.
+ * @returns {Promise<object>} A promise that resolves with a success message.
+ * @throws {Error} Throws an error if deletion fails.
+ */
+export const deleteCategory = async (categoryId) => {
+    try {
+        const token = localStorage.getItem('token');
+        if (!token) throw new Error('Authentication token not found. Please log in.');
+        const response = await axios.delete(`${API_BASE_URL}/api/admin/categories/${categoryId}`, {
+            headers: { Authorization: `Bearer ${token}` },
+        });
+        return response.data;
+    } catch (error) {
+        console.error(`Error deleting category ${categoryId}:`, error.response?.data);
+        throw new Error(error.response?.data?.message || 'Failed to delete category');
     }
 };
 
@@ -156,24 +243,19 @@ export const fetchCategories = async () => {
 export const fetchInstructorCourses = async () => {
     try {
         const token = localStorage.getItem('token');
-        if (!token) {
-            throw new Error('Authentication token not found. Please log in.');
-        }
+        if (!token) throw new Error('Authentication token not found. Please log in.');
         const response = await axios.get(`${API_BASE_URL}/api/instructor/courses`, {
-            headers: {
-                Authorization: `Bearer ${token}`,
-            },
+            headers: { Authorization: `Bearer ${token}` },
         });
         return response.data.courses;
     } catch (error) {
-        console.error('Error fetching instructor courses:', error);
-        throw error;
+        console.error('Error fetching instructor courses:', error.response?.data);
+        throw new Error(error.response?.data?.message || 'Failed to fetch instructor courses');
     }
 };
 
 /**
  * Creates a new course.
- * Requires a valid JWT token and instructor role.
  * @param {FormData} courseData - FormData object containing course details (including thumbnail file).
  * @returns {Promise<object>} A promise that resolves with the created course data.
  * @throws {Error} Throws an error if creation fails.
@@ -181,46 +263,89 @@ export const fetchInstructorCourses = async () => {
 export const createCourse = async (courseData) => {
     try {
         const token = localStorage.getItem('token');
-        if (!token) {
-            throw new Error('Authentication token not found. Please log in.');
-        }
+        if (!token) throw new Error('Authentication token not found. Please log in.');
         const response = await axios.post(`${API_BASE_URL}/api/instructor/courses`, courseData, {
             headers: {
                 Authorization: `Bearer ${token}`,
-                'Content-Type': 'multipart/form-data', // Important for FormData
+                'Content-Type': 'multipart/form-data',
             },
         });
         return response.data;
     } catch (error) {
-        console.error('Error creating course:', error);
-        throw error;
+        console.error('Error creating course:', error.response?.data);
+        throw new Error(error.response?.data?.message || 'Failed to create course');
     }
 };
 
 /**
  * Updates an existing course.
- * Requires a valid JWT token and instructor role.
  * @param {string} courseId - The ID of the course to update.
  * @param {FormData} updateData - FormData object containing updated course details and optionally a new thumbnail.
- * @returns {Promise<object>} A promise that resolves with a success message.
+ * @returns {Promise<object>} A promise that resolves with the updated course data.
  * @throws {Error} Throws an error if course update fails.
  */
 export const updateCourse = async (courseId, updateData) => {
     try {
         const token = localStorage.getItem('token');
-        if (!token) {
-            throw new Error('Authentication token not found. Please log in.');
-        }
+        if (!token) throw new Error('Authentication token not found. Please log in.');
         const response = await axios.put(`${API_BASE_URL}/api/instructor/courses/${courseId}`, updateData, {
             headers: {
                 Authorization: `Bearer ${token}`,
-                'Content-Type': 'multipart/form-data', // Important for FormData
+                'Content-Type': 'multipart/form-data',
             },
         });
         return response.data;
     } catch (error) {
-        console.error(`Error updating course ${courseId}:`, error);
-        throw error;
+        console.error(`Error updating course ${courseId}:`, error.response?.data);
+        throw new Error(error.response?.data?.message || 'Failed to update course');
+    }
+};
+
+/**
+ * Deletes a course (admin only).
+ * @param {string} courseId - The ID of the course to delete.
+ * @returns {Promise<object>} A promise that resolves with a success message.
+ * @throws {Error} Throws an error if deletion fails.
+ */
+export const deleteCourse = async (courseId) => {
+    try {
+        const token = localStorage.getItem('token');
+        if (!token) throw new Error('Authentication token not found. Please log in.');
+        const response = await axios.delete(`${API_BASE_URL}/api/admin/courses/${courseId}`, {
+            headers: { Authorization: `Bearer ${token}` },
+        });
+        return response.data;
+    } catch (error) {
+        console.error(`Error deleting course ${courseId}:`, error.response?.data);
+        throw new Error(error.response?.data?.message || 'Failed to delete course');
+    }
+};
+
+/**
+ * Updates course status (admin only).
+ * @param {string} courseId - The ID of the course to update.
+ * @param {string} status - The new status ('draft', 'published', 'archived').
+ * @returns {Promise<object>} A promise that resolves with the updated course data.
+ * @throws {Error} Throws an error if update fails.
+ */
+export const updateCourseStatus = async (courseId, status) => {
+    try {
+        const token = localStorage.getItem('token');
+        if (!token) throw new Error('Authentication token not found. Please log in.');
+        const response = await axios.put(
+            `${API_BASE_URL}/api/admin/courses/${courseId}/status`,
+            { status },
+            {
+                headers: {
+                    Authorization: `Bearer ${token}`,
+                    'Content-Type': 'application/json',
+                },
+            }
+        );
+        return response.data;
+    } catch (error) {
+        console.error(`Error updating course status for ${courseId}:`, error.response?.data);
+        throw new Error(error.response?.data?.message || 'Failed to update course status');
     }
 };
 
@@ -228,25 +353,23 @@ export const updateCourse = async (courseId, updateData) => {
  * Adds a new material (video or document) to a course.
  * @param {string} courseId - The ID of the course to add material to.
  * @param {FormData} materialData - FormData object containing material details and the file.
- * @returns {Promise<object>} A promise that resolves with the new material's ID.
+ * @returns {Promise<object>} A promise that resolves with the new material's data.
  * @throws {Error} Throws an error if adding material fails.
  */
 export const addCourseMaterial = async (courseId, materialData) => {
     try {
         const token = localStorage.getItem('token');
-        if (!token) {
-            throw new Error('Authentication token not found. Please log in.');
-        }
+        if (!token) throw new Error('Authentication token not found. Please log in.');
         const response = await axios.post(`${API_BASE_URL}/api/instructor/courses/${courseId}/materials`, materialData, {
             headers: {
                 Authorization: `Bearer ${token}`,
-                'Content-Type': 'multipart/form-data', // Essential for file uploads
+                'Content-Type': 'multipart/form-data',
             },
         });
         return response.data;
     } catch (error) {
-        console.error(`Error adding material to course ${courseId}:`, error);
-        throw error;
+        console.error(`Error adding material to course ${courseId}:`, error.response?.data);
+        throw new Error(error.response?.data?.message || 'Failed to add course material');
     }
 };
 
@@ -255,15 +378,13 @@ export const addCourseMaterial = async (courseId, materialData) => {
  * @param {string} courseId - The ID of the course the material belongs to.
  * @param {string} materialId - The ID of the material to update.
  * @param {FormData} updateData - FormData object containing updated material details and optionally a new file.
- * @returns {Promise<object>} A promise that resolves with a success message.
+ * @returns {Promise<object>} A promise that resolves with the updated material data.
  * @throws {Error} Throws an error if material update fails.
  */
 export const updateCourseMaterial = async (courseId, materialId, updateData) => {
     try {
         const token = localStorage.getItem('token');
-        if (!token) {
-            throw new Error('Authentication token not found. Please log in.');
-        }
+        if (!token) throw new Error('Authentication token not found. Please log in.');
         const response = await axios.put(`${API_BASE_URL}/api/instructor/courses/${courseId}/materials/${materialId}`, updateData, {
             headers: {
                 Authorization: `Bearer ${token}`,
@@ -272,8 +393,8 @@ export const updateCourseMaterial = async (courseId, materialId, updateData) => 
         });
         return response.data;
     } catch (error) {
-        console.error(`Error updating material ${materialId} for course ${courseId}:`, error);
-        throw error;
+        console.error(`Error updating material ${materialId} for course ${courseId}:`, error.response?.data);
+        throw new Error(error.response?.data?.message || 'Failed to update course material');
     }
 };
 
@@ -287,24 +408,19 @@ export const updateCourseMaterial = async (courseId, materialId, updateData) => 
 export const deleteCourseMaterial = async (courseId, materialId) => {
     try {
         const token = localStorage.getItem('token');
-        if (!token) {
-            throw new Error('Authentication token not found. Please log in.');
-        }
+        if (!token) throw new Error('Authentication token not found. Please log in.');
         const response = await axios.delete(`${API_BASE_URL}/api/instructor/courses/${courseId}/materials/${materialId}`, {
-            headers: {
-                Authorization: `Bearer ${token}`,
-            },
+            headers: { Authorization: `Bearer ${token}` },
         });
         return response.data;
     } catch (error) {
-        console.error(`Error deleting material ${materialId} for course ${courseId}:`, error);
-        throw error;
+        console.error(`Error deleting material ${materialId} for course ${courseId}:`, error.response?.data);
+        throw new Error(error.response?.data?.message || 'Failed to delete course material');
     }
 };
 
 /**
  * Fetches all materials for a specific course.
- * Requires a valid JWT token.
  * @param {string} courseId - The ID of the course to fetch materials for.
  * @returns {Promise<Array>} A promise that resolves with an array of material objects.
  * @throws {Error} Throws an error if fetching materials fails.
@@ -312,18 +428,14 @@ export const deleteCourseMaterial = async (courseId, materialId) => {
 export const fetchCourseMaterials = async (courseId) => {
     try {
         const token = localStorage.getItem('token');
-        if (!token) {
-            throw new Error('Authentication token not found. Please log in.');
-        }
+        if (!token) throw new Error('Authentication token not found. Please log in.');
         const response = await axios.get(`${API_BASE_URL}/api/courses/${courseId}/materials`, {
-            headers: {
-                Authorization: `Bearer ${token}`,
-            },
+            headers: { Authorization: `Bearer ${token}` },
         });
         return response.data.materials;
     } catch (error) {
-        console.error(`Error fetching materials for course ${courseId}:`, error);
-        throw error;
+        console.error(`Error fetching materials for course ${courseId}:`, error.response?.data);
+        throw new Error(error.response?.data?.message || 'Failed to fetch course materials');
     }
 };
 
@@ -337,8 +449,8 @@ export const fetchCourses = async () => {
         const response = await axios.get(`${API_BASE_URL}/api/courses`);
         return response.data.courses;
     } catch (error) {
-        console.error('Error fetching courses:', error);
-        throw error;
+        console.error('Error fetching courses:', error.response?.data);
+        throw new Error(error.response?.data?.message || 'Failed to fetch courses');
     }
 };
 
@@ -350,17 +462,16 @@ export const fetchCourses = async () => {
  */
 export const fetchCourseDetails = async (slug) => {
     try {
-        const response = await axios.get(`${API_BASE_URL}/api/courses/${slug}`); // Assuming your backend API for course details is at /api/courses/:slug
-        return response.data.course; // Assuming your backend sends course data inside a 'course' property
+        const response = await axios.get(`${API_BASE_URL}/api/courses/${slug}`);
+        return response.data.course;
     } catch (error) {
-        console.error(`Error fetching course details for slug ${slug}:`, error);
-        throw error;
+        console.error(`Error fetching course details for slug ${slug}:`, error.response?.data);
+        throw new Error(error.response?.data?.message || 'Failed to fetch course details');
     }
 };
 
 /**
  * Enrolls the logged-in student into a specific course.
- * Requires a valid JWT token and student role.
  * @param {string} courseId - The ID of the course to enroll in.
  * @returns {Promise<object>} A promise that resolves with a success message.
  * @throws {Error} Throws an error if enrollment fails.
@@ -368,48 +479,38 @@ export const fetchCourseDetails = async (slug) => {
 export const enrollCourse = async (courseId) => {
     try {
         const token = localStorage.getItem('token');
-        if (!token) {
-            throw new Error('Authentication token not found. Please log in.');
-        }
+        if (!token) throw new Error('Authentication token not found. Please log in.');
         const response = await axios.post(`${API_BASE_URL}/api/student/enroll/${courseId}`, {}, {
-            headers: {
-                Authorization: `Bearer ${token}`,
-            },
+            headers: { Authorization: `Bearer ${token}` },
         });
         return response.data;
     } catch (error) {
-        console.error(`Error enrolling in course ${courseId}:`, error);
-        throw error;
+        console.error(`Error enrolling in course ${courseId}:`, error.response?.data);
+        throw new Error(error.response?.data?.message || 'Failed to enroll in course');
     }
 };
 
 /**
  * Fetches courses the logged-in student is enrolled in.
- * Requires a valid JWT token and student role.
  * @returns {Promise<Array>} A promise that resolves with an array of enrolled course objects.
  * @throws {Error} Throws an error if fetching enrolled courses fails.
  */
 export const fetchEnrolledCourses = async () => {
     try {
         const token = localStorage.getItem('token');
-        if (!token) {
-            throw new Error('Authentication token not found. Please log in.');
-        }
+        if (!token) throw new Error('Authentication token not found. Please log in.');
         const response = await axios.get(`${API_BASE_URL}/api/student/courses`, {
-            headers: {
-                Authorization: `Bearer ${token}`,
-            },
+            headers: { Authorization: `Bearer ${token}` },
         });
         return response.data.enrolledCourses;
     } catch (error) {
-        console.error('Error fetching enrolled courses:', error);
-        throw error;
+        console.error('Error fetching enrolled courses:', error.response?.data);
+        throw new Error(error.response?.data?.message || 'Failed to fetch enrolled courses');
     }
 };
 
 /**
  * Fetches chat messages for a specific course.
- * Requires a valid JWT token and membership in the course (instructor or enrolled student).
  * @param {string} courseId - The ID of the course to fetch messages for.
  * @returns {Promise<Array>} A promise that resolves with an array of message objects.
  * @throws {Error} Throws an error if fetching messages fails.
@@ -417,22 +518,19 @@ export const fetchEnrolledCourses = async () => {
 export const fetchCourseChatMessages = async (courseId) => {
     try {
         const token = localStorage.getItem('token');
-        if (!token) {
-            throw new Error('Authentication token not found. Please log in.');
-        }
+        if (!token) throw new Error('Authentication token not found. Please log in.');
         const response = await axios.get(`${API_BASE_URL}/api/courses/${courseId}/chat/messages`, {
-            headers: { Authorization: `Bearer ${token}` }
+            headers: { Authorization: `Bearer ${token}` },
         });
         return response.data.messages;
     } catch (error) {
-        console.error(`Error fetching chat messages for course ${courseId}:`, error);
-        throw error;
+        console.error(`Error fetching chat messages for course ${courseId}:`, error.response?.data);
+        throw new Error(error.response?.data?.message || 'Failed to fetch chat messages');
     }
 };
 
 /**
  * Sends a chat message to a specific course.
- * Requires a valid JWT token and membership in the course (instructor or enrolled student).
  * @param {string} courseId - The ID of the course to send the message to.
  * @param {string} messageContent - The content of the message.
  * @returns {Promise<object>} A promise that resolves with a success message.
@@ -441,50 +539,41 @@ export const fetchCourseChatMessages = async (courseId) => {
 export const sendCourseChatMessage = async (courseId, messageContent) => {
     try {
         const token = localStorage.getItem('token');
-        if (!token) {
-            throw new Error('Authentication token not found. Please log in.');
-        }
-        const response = await axios.post(`${API_BASE_URL}/api/courses/${courseId}/chat/messages`,
+        if (!token) throw new Error('Authentication token not found. Please log in.');
+        const response = await axios.post(
+            `${API_BASE_URL}/api/courses/${courseId}/chat/messages`,
             { message_content: messageContent },
             { headers: { Authorization: `Bearer ${token}` } }
         );
         return response.data;
     } catch (error) {
-        console.error(`Error sending chat message to course ${courseId}:`, error);
-        throw error;
+        console.error(`Error sending chat message to course ${courseId}:`, error.response?.data);
+        throw new Error(error.response?.data?.message || 'Failed to send chat message');
     }
 };
 
 /**
  * Fetches a list of enrolled students for a specific course.
- * Requires a valid JWT token and instructor role, and the instructor must own the course.
  * @param {string} courseId - The ID of the course to fetch enrolled students for.
- * @returns {Promise<Array>} A promise that resolves with an array of student objects (id, name, email, enrollment details).
- * @throws {Error} Throws an error if fetching fails (e.g., unauthorized, course not found).
+ * @returns {Promise<Array>} A promise that resolves with an array of student objects.
+ * @throws {Error} Throws an error if fetching fails.
  */
 export const fetchEnrolledStudents = async (courseId) => {
     try {
         const token = localStorage.getItem('token');
-        if (!token) {
-            throw new Error('Authentication token not found. Please log in.');
-        }
+        if (!token) throw new Error('Authentication token not found. Please log in.');
         const response = await axios.get(`${API_BASE_URL}/api/instructor/courses/${courseId}/enrolled-students`, {
-            headers: { Authorization: `Bearer ${token}` }
+            headers: { Authorization: `Bearer ${token}` },
         });
         return response.data.students;
     } catch (error) {
-        console.error(`Error fetching enrolled students for course ${courseId}:`, error);
-        throw error;
+        console.error(`Error fetching enrolled students for course ${courseId}:`, error.response?.data);
+        throw new Error(error.response?.data?.message || 'Failed to fetch enrolled students');
     }
 };
 
-// ===============================================
-// ONLINE CLASS MANAGEMENT FUNCTIONS - UPDATED
-// ===============================================
-
 /**
  * Fetches all online classes for a specific course.
- * Works for both instructors and enrolled students.
  * @param {string} courseId - The ID of the course to fetch classes for.
  * @returns {Promise<Array>} A promise that resolves with an array of class objects.
  * @throws {Error} Throws an error if fetching classes fails.
@@ -492,18 +581,14 @@ export const fetchEnrolledStudents = async (courseId) => {
 export const fetchCourseClasses = async (courseId) => {
     try {
         const token = localStorage.getItem('token');
-        if (!token) {
-            throw new Error('Authentication token not found. Please log in.');
-        }
+        if (!token) throw new Error('Authentication token not found. Please log in.');
         const response = await axios.get(`${API_BASE_URL}/api/courses/${courseId}/classes`, {
-            headers: {
-                Authorization: `Bearer ${token}`,
-            },
+            headers: { Authorization: `Bearer ${token}` },
         });
         return response.data.classes;
     } catch (error) {
-        console.error(`Error fetching classes for course ${courseId}:`, error);
-        throw error;
+        console.error(`Error fetching classes for course ${courseId}:`, error.response?.data);
+        throw new Error(error.response?.data?.message || 'Failed to fetch course classes');
     }
 };
 
@@ -517,18 +602,14 @@ export const fetchCourseClasses = async (courseId) => {
 export const joinOnlineClass = async (courseId, classId) => {
     try {
         const token = localStorage.getItem('token');
-        if (!token) {
-            throw new Error('Authentication token not found. Please log in.');
-        }
+        if (!token) throw new Error('Authentication token not found. Please log in.');
         const response = await axios.post(`${API_BASE_URL}/api/courses/${courseId}/classes/${classId}/join`, {}, {
-            headers: {
-                Authorization: `Bearer ${token}`,
-            },
+            headers: { Authorization: `Bearer ${token}` },
         });
         return response.data;
     } catch (error) {
-        console.error(`Error joining class ${classId} for course ${courseId}:`, error);
-        throw error;
+        console.error(`Error joining class ${classId} for course ${courseId}:`, error.response?.data);
+        throw new Error(error.response?.data?.message || 'Failed to join online class');
     }
 };
 
@@ -541,30 +622,18 @@ export const joinOnlineClass = async (courseId, classId) => {
 export const fetchStudentOnlineClasses = async (status = null) => {
     try {
         const token = localStorage.getItem('token');
-        if (!token) {
-            throw new Error('Authentication token not found. Please log in.');
-        }
-        
+        if (!token) throw new Error('Authentication token not found. Please log in.');
         let url = `${API_BASE_URL}/api/student/online-classes`;
-        if (status) {
-            url += `?status=${status}`;
-        }
-        
+        if (status) url += `?status=${status}`;
         const response = await axios.get(url, {
-            headers: {
-                Authorization: `Bearer ${token}`,
-            },
+            headers: { Authorization: `Bearer ${token}` },
         });
         return response.data.classes;
     } catch (error) {
-        console.error('Error fetching student online classes:', error);
-        throw error;
+        console.error('Error fetching student online classes:', error.response?.data);
+        throw new Error(error.response?.data?.message || 'Failed to fetch student online classes');
     }
 };
-
-// ===============================================
-// INSTRUCTOR ONLINE CLASS MANAGEMENT FUNCTIONS
-// ===============================================
 
 /**
  * Schedules a new online class.
@@ -575,9 +644,7 @@ export const fetchStudentOnlineClasses = async (status = null) => {
 export const scheduleOnlineClass = async (classData) => {
     try {
         const token = localStorage.getItem('token');
-        if (!token) {
-            throw new Error('Authentication token not found. Please log in.');
-        }
+        if (!token) throw new Error('Authentication token not found. Please log in.');
         const response = await axios.post(`${API_BASE_URL}/api/online-classes`, classData, {
             headers: {
                 Authorization: `Bearer ${token}`,
@@ -586,8 +653,8 @@ export const scheduleOnlineClass = async (classData) => {
         });
         return response.data;
     } catch (error) {
-        console.error('Error scheduling online class:', error);
-        throw error;
+        console.error('Error scheduling online class:', error.response?.data);
+        throw new Error(error.response?.data?.message || 'Failed to schedule online class');
     }
 };
 
@@ -600,24 +667,16 @@ export const scheduleOnlineClass = async (classData) => {
 export const fetchInstructorOnlineClasses = async (status = null) => {
     try {
         const token = localStorage.getItem('token');
-        if (!token) {
-            throw new Error('Authentication token not found. Please log in.');
-        }
-        
+        if (!token) throw new Error('Authentication token not found. Please log in.');
         let url = `${API_BASE_URL}/api/online-classes`;
-        if (status) {
-            url += `?status=${status}`;
-        }
-        
+        if (status) url += `?status=${status}`;
         const response = await axios.get(url, {
-            headers: {
-                Authorization: `Bearer ${token}`,
-            },
+            headers: { Authorization: `Bearer ${token}` },
         });
         return response.data.data;
     } catch (error) {
-        console.error('Error fetching instructor online classes:', error);
-        throw error;
+        console.error('Error fetching instructor online classes:', error.response?.data);
+        throw new Error(error.response?.data?.message || 'Failed to fetch instructor online classes');
     }
 };
 
@@ -631,11 +690,10 @@ export const fetchInstructorOnlineClasses = async (status = null) => {
 export const updateClassStatus = async (classId, status) => {
     try {
         const token = localStorage.getItem('token');
-        if (!token) {
-            throw new Error('Authentication token not found. Please log in.');
-        }
-        const response = await axios.put(`${API_BASE_URL}/api/online-classes/${classId}/status`, 
-            { status }, 
+        if (!token) throw new Error('Authentication token not found. Please log in.');
+        const response = await axios.put(
+            `${API_BASE_URL}/api/online-classes/${classId}/status`,
+            { status },
             {
                 headers: {
                     Authorization: `Bearer ${token}`,
@@ -645,8 +703,8 @@ export const updateClassStatus = async (classId, status) => {
         );
         return response.data;
     } catch (error) {
-        console.error(`Error updating class ${classId} status:`, error);
-        throw error;
+        console.error(`Error updating class ${classId} status:`, error.response?.data);
+        throw new Error(error.response?.data?.message || 'Failed to update class status');
     }
 };
 
@@ -658,133 +716,144 @@ export const updateClassStatus = async (classId, status) => {
 export const fetchInstructorCoursesForClasses = async () => {
     try {
         const token = localStorage.getItem('token');
-        if (!token) {
-            throw new Error('Authentication token not found. Please log in.');
-        }
+        if (!token) throw new Error('Authentication token not found. Please log in.');
         const response = await axios.get(`${API_BASE_URL}/api/instructor/courses-for-classes`, {
-            headers: {
-                Authorization: `Bearer ${token}`,
-            },
+            headers: { Authorization: `Bearer ${token}` },
         });
         return response.data.data;
     } catch (error) {
-        console.error('Error fetching instructor courses for classes:', error);
-        throw error;
+        console.error('Error fetching instructor courses for classes:', error.response?.data);
+        throw new Error(error.response?.data?.message || 'Failed to fetch instructor courses for classes');
     }
 };
-
-// ===============================================
-// LEGACY FUNCTIONS (keeping for backward compatibility)
-// ===============================================
-
-/**
- * @deprecated Use scheduleOnlineClass instead
- */
-export const createOnlineClass = async (courseId, classData) => {
-    console.warn('createOnlineClass is deprecated. Use scheduleOnlineClass instead.');
-    return await scheduleOnlineClass({ ...classData, course_id: courseId });
-};
-
-/**
- * @deprecated Use updateClassStatus instead
- */
-export const updateOnlineClass = async (courseId, classId, updateData) => {
-    console.warn('updateOnlineClass is deprecated. Use updateClassStatus instead.');
-    if (updateData.status) {
-        return await updateClassStatus(classId, updateData.status);
-    }
-    throw new Error('Only status updates are supported through this function');
-};
-
-/**
- * @deprecated Direct class deletion not supported in new system
- */
-export const deleteOnlineClass = async (courseId, classId) => {
-    console.warn('deleteOnlineClass is deprecated. Use updateClassStatus with "cancelled" status instead.');
-    return await updateClassStatus(classId, 'cancelled');
-};
-
-// ===============================================
-// ADMIN MANAGEMENT FUNCTIONS - ADD THESE TO YOUR api.js FILE
-// ===============================================
 
 /**
  * Fetches all users (admin only).
- * Requires a valid JWT token and admin role.
  * @returns {Promise<Array>} A promise that resolves with an array of all user objects.
  * @throws {Error} Throws an error if fetching users fails.
  */
 export const fetchAllUsers = async () => {
     try {
         const token = localStorage.getItem('token');
-        if (!token) {
-            throw new Error('Authentication token not found. Please log in.');
-        }
+        if (!token) throw new Error('Authentication token not found. Please log in.');
         const response = await axios.get(`${API_BASE_URL}/api/admin/users`, {
-            headers: {
-                Authorization: `Bearer ${token}`,
-            },
+            headers: { Authorization: `Bearer ${token}` },
         });
         return response.data.users;
     } catch (error) {
-        console.error('Error fetching all users:', error);
-        throw error;
+        console.error('Error fetching all users:', error.response?.data);
+        throw new Error(error.response?.data?.message || 'Failed to fetch all users');
+    }
+};
+
+/**
+ * Fetches recent users for the admin dashboard overview tab (e.g., last 5 users).
+ * @returns {Promise<Array>} A promise that resolves with an array of recent user objects.
+ * @throws {Error} Throws an error if fetching recent users fails.
+ */
+export const fetchRecentUsers = async () => {
+    try {
+        const token = localStorage.getItem('token');
+        if (!token) throw new Error('Authentication token not found. Please log in.');
+        const response = await axios.get(`${API_BASE_URL}/api/admin/users/recent?limit=5`, {
+            headers: { Authorization: `Bearer ${token}` },
+        });
+        return response.data.users;
+    } catch (error) {
+        console.error('Error fetching recent users:', error.response?.data);
+        throw new Error(error.response?.data?.message || 'Failed to fetch recent users');
     }
 };
 
 /**
  * Fetches all courses (admin only).
- * Requires a valid JWT token and admin role.
  * @returns {Promise<Array>} A promise that resolves with an array of all course objects.
  * @throws {Error} Throws an error if fetching courses fails.
  */
 export const fetchAllCourses = async () => {
     try {
         const token = localStorage.getItem('token');
-        if (!token) {
-            throw new Error('Authentication token not found. Please log in.');
-        }
+        if (!token) throw new Error('Authentication token not found. Please log in.');
         const response = await axios.get(`${API_BASE_URL}/api/admin/courses`, {
-            headers: {
-                Authorization: `Bearer ${token}`,
-            },
+            headers: { Authorization: `Bearer ${token}` },
         });
         return response.data.courses;
     } catch (error) {
-        console.error('Error fetching all courses:', error);
-        throw error;
+        console.error('Error fetching all courses:', error.response?.data);
+        throw new Error(error.response?.data?.message || 'Failed to fetch all courses');
+    }
+};
+
+/**
+ * Fetches recent courses for the admin dashboard overview tab (e.g., last 5 courses).
+ * @returns {Promise<Array>} A promise that resolves with an array of recent course objects.
+ * @throws {Error} Throws an error if fetching recent courses fails.
+ */
+export const fetchRecentCourses = async () => {
+    try {
+        const token = localStorage.getItem('token');
+        if (!token) throw new Error('Authentication token not found. Please log in.');
+        const response = await axios.get(`${API_BASE_URL}/api/admin/courses/recent?limit=5`, {
+            headers: { Authorization: `Bearer ${token}` },
+        });
+        return response.data.courses;
+    } catch (error) {
+        console.error('Error fetching recent courses:', error.response?.data);
+        throw new Error(error.response?.data?.message || 'Failed to fetch recent courses');
     }
 };
 
 /**
  * Creates a new instructor account (admin only).
- * Requires a valid JWT token and admin role.
  * @param {object} instructorData - Object containing instructor details (name, email, password, etc.).
  * @returns {Promise<object>} A promise that resolves with the created instructor data.
  * @throws {Error} Throws an error if creation fails.
  */
-export const createInstructor = async (instructorData) => {
-    try {
-        const token = localStorage.getItem('token');
-        if (!token) {
-            throw new Error('Authentication token not found. Please log in.');
-        }
-        const response = await axios.post(`${API_BASE_URL}/api/admin/create-instructor`, instructorData, {
-            headers: {
-                Authorization: `Bearer ${token}`,
-                'Content-Type': 'application/json',
-            },
-        });
-        return response.data;
-    } catch (error) {
-        console.error('Error creating instructor:', error);
-        throw error;
+// ✅ 1. FIXED createInstructor
+export const createInstructor = async (formData) => {
+    const token = localStorage.getItem('token');
+    console.log('🚀 Creating instructor → http://localhost:5000/api/admin/create-instructor');
+    
+    // 🔥 DEBUG: Show FormData contents
+    console.log('📦 FormData contents:');
+    for (let [key, value] of formData.entries()) {
+        console.log(`   ${key}: ${value}`);
     }
+    
+    const response = await fetch('http://localhost:5000/api/admin/create-instructor', {
+        method: 'POST',
+        headers: {
+            'Authorization': `Bearer ${token}`,
+        },
+        body: formData
+    });
+    
+    console.log('📡 Status:', response.status);
+    console.log('📡 URL:', response.url);
+    
+    if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        console.error('❌ FULL ERROR:', errorData);
+        
+        // 🔥 BETTER ERROR MESSAGES
+        if (errorData.message === 'Validation error') {
+            const validationErrors = errorData.errors.map(err => `${err.path}: ${err.msg}`).join(', ');
+            throw new Error(`Validation failed: ${validationErrors}`);
+        }
+        if (errorData.message === 'Email already exists') {
+            throw new Error('Email already exists');
+        }
+        throw new Error(errorData.message || `HTTP ${response.status}`);
+    }
+    
+    const data = await response.json();
+    console.log('✅ SUCCESS:', data);
+    return data;
 };
+
 
 /**
  * Updates a user's information (admin only).
- * Requires a valid JWT token and admin role.
  * @param {string} userId - The ID of the user to update.
  * @param {object} updateData - Object containing updated user details.
  * @returns {Promise<object>} A promise that resolves with the updated user data.
@@ -793,9 +862,7 @@ export const createInstructor = async (instructorData) => {
 export const updateUser = async (userId, updateData) => {
     try {
         const token = localStorage.getItem('token');
-        if (!token) {
-            throw new Error('Authentication token not found. Please log in.');
-        }
+        if (!token) throw new Error('Authentication token not found. Please log in.');
         const response = await axios.put(`${API_BASE_URL}/api/admin/users/${userId}`, updateData, {
             headers: {
                 Authorization: `Bearer ${token}`,
@@ -804,14 +871,13 @@ export const updateUser = async (userId, updateData) => {
         });
         return response.data;
     } catch (error) {
-        console.error(`Error updating user ${userId}:`, error);
-        throw error;
+        console.error(`Error updating user ${userId}:`, error.response?.data);
+        throw new Error(error.response?.data?.message || 'Failed to update user');
     }
 };
 
 /**
  * Deletes a user (admin only).
- * Requires a valid JWT token and admin role.
  * @param {string} userId - The ID of the user to delete.
  * @returns {Promise<object>} A promise that resolves with a success message.
  * @throws {Error} Throws an error if deletion fails.
@@ -819,142 +885,90 @@ export const updateUser = async (userId, updateData) => {
 export const deleteUser = async (userId) => {
     try {
         const token = localStorage.getItem('token');
-        if (!token) {
-            throw new Error('Authentication token not found. Please log in.');
-        }
+        if (!token) throw new Error('Authentication token not found. Please log in.');
         const response = await axios.delete(`${API_BASE_URL}/api/admin/users/${userId}`, {
-            headers: {
-                Authorization: `Bearer ${token}`,
-            },
+            headers: { Authorization: `Bearer ${token}` },
         });
         return response.data;
     } catch (error) {
-        console.error(`Error deleting user ${userId}:`, error);
-        throw error;
+        console.error(`Error deleting user ${userId}:`, error.response?.data);
+        throw new Error(error.response?.data?.message || 'Failed to delete user');
     }
 };
 
 /**
- * Deletes a course (admin only).
- * Requires a valid JWT token and admin role.
- * @param {string} courseId - The ID of the course to delete.
- * @returns {Promise<object>} A promise that resolves with a success message.
- * @throws {Error} Throws an error if deletion fails.
+ * Resets a user's password (admin only).
+ * @param {string} userId - The ID of the user whose password to reset.
+ * @returns {Promise<object>} A promise that resolves with the temporary password.
+ * @throws {Error} Throws an error if reset fails.
  */
-export const deleteCourse = async (courseId) => {
+export const resetUserPassword = async (userId) => {
     try {
         const token = localStorage.getItem('token');
-        if (!token) {
-            throw new Error('Authentication token not found. Please log in.');
-        }
-        const response = await axios.delete(`${API_BASE_URL}/api/admin/courses/${courseId}`, {
-            headers: {
-                Authorization: `Bearer ${token}`,
-            },
+        if (!token) throw new Error('Authentication token not found. Please log in.');
+        const response = await axios.post(`${API_BASE_URL}/api/admin/users/${userId}/reset-password`, {}, {
+            headers: { Authorization: `Bearer ${token}` },
         });
         return response.data;
     } catch (error) {
-        console.error(`Error deleting course ${courseId}:`, error);
-        throw error;
+        console.error(`Error resetting password for user ${userId}:`, error.response?.data);
+        throw new Error(error.response?.data?.message || 'Failed to reset user password');
     }
 };
 
 /**
- * Creates a new category (admin only).
- * Requires a valid JWT token and admin role.
- * @param {object} categoryData - Object containing category details (name, description, etc.).
- * @returns {Promise<object>} A promise that resolves with the created category data.
- * @throws {Error} Throws an error if creation fails.
+ * Fetches system statistics (admin only).
+ * @returns {Promise<object>} A promise that resolves with system statistics.
+ * @throws {Error} Throws an error if fetching statistics fails.
  */
-export const createCategory = async (categoryData) => {
+export const fetchSystemStatistics = async () => {
     try {
         const token = localStorage.getItem('token');
-        if (!token) {
-            throw new Error('Authentication token not found. Please log in.');
-        }
-        const response = await axios.post(`${API_BASE_URL}/api/admin/categories`, categoryData, {
-            headers: {
-                Authorization: `Bearer ${token}`,
-                'Content-Type': 'application/json',
-            },
+        if (!token) throw new Error('Authentication token not found. Please log in.');
+        const response = await axios.get(`${API_BASE_URL}/api/admin/statistics`, {
+            headers: { Authorization: `Bearer ${token}` },
         });
         return response.data;
     } catch (error) {
-        console.error('Error creating category:', error);
-        throw error;
+        console.error('Error fetching system statistics:', error.response?.data);
+        throw new Error(error.response?.data?.message || 'Failed to fetch system statistics');
     }
 };
 
 /**
- * Updates a category (admin only).
- * Requires a valid JWT token and admin role.
- * @param {string} categoryId - The ID of the category to update.
- * @param {object} updateData - Object containing updated category details.
- * @returns {Promise<object>} A promise that resolves with the updated category data.
+ * Fetches video progress for a specific course.
+ * @param {string} courseId - The ID of the course to fetch progress for.
+ * @returns {Promise<Array>} A promise that resolves with an array of progress objects.
+ * @throws {Error} Throws an error if fetching progress fails.
+ */
+export const fetchVideoProgress = async (courseId) => {
+    try {
+        const token = localStorage.getItem('token');
+        if (!token) throw new Error('Authentication token not found. Please log in.');
+        const response = await axios.get(`${API_BASE_URL}/api/courses/${courseId}/progress`, {
+            headers: { Authorization: `Bearer ${token}` },
+        });
+        return response.data.progress;
+    } catch (error) {
+        console.error(`Error fetching video progress for course ${courseId}:`, error.response?.data);
+        throw new Error(error.response?.data?.message || 'Failed to fetch video progress');
+    }
+};
+
+/**
+ * Updates video progress for a specific material.
+ * @param {string} materialId - The ID of the video material.
+ * @param {number} watched_duration_seconds - The watched duration in seconds.
+ * @returns {Promise<object>} A promise that resolves with updated progress data.
  * @throws {Error} Throws an error if update fails.
  */
-export const updateCategory = async (categoryId, updateData) => {
+export const updateVideoProgress = async (materialId, watched_duration_seconds) => {
     try {
         const token = localStorage.getItem('token');
-        if (!token) {
-            throw new Error('Authentication token not found. Please log in.');
-        }
-        const response = await axios.put(`${API_BASE_URL}/api/admin/categories/${categoryId}`, updateData, {
-            headers: {
-                Authorization: `Bearer ${token}`,
-                'Content-Type': 'application/json',
-            },
-        });
-        return response.data;
-    } catch (error) {
-        console.error(`Error updating category ${categoryId}:`, error);
-        throw error;
-    }
-};
-
-/**
- * Deletes a category (admin only).
- * Requires a valid JWT token and admin role.
- * @param {string} categoryId - The ID of the category to delete.
- * @returns {Promise<object>} A promise that resolves with a success message.
- * @throws {Error} Throws an error if deletion fails.
- */
-export const deleteCategory = async (categoryId) => {
-    try {
-        const token = localStorage.getItem('token');
-        if (!token) {
-            throw new Error('Authentication token not found. Please log in.');
-        }
-        const response = await axios.delete(`${API_BASE_URL}/api/admin/categories/${categoryId}`, {
-            headers: {
-                Authorization: `Bearer ${token}`,
-            },
-        });
-        return response.data;
-    } catch (error) {
-        console.error(`Error deleting category ${categoryId}:`, error);
-        throw error;
-    }
-};
-
-// ADD these additional functions to the end of your existing api.js file
-
-/**
- * Updates course status (admin only).
- * Requires a valid JWT token and admin role.
- * @param {string} courseId - The ID of the course to update.
- * @param {string} status - The new status ('draft', 'published', 'archived').
- * @returns {Promise<object>} A promise that resolves with a success message.
- * @throws {Error} Throws an error if update fails.
- */
-export const updateCourseStatus = async (courseId, status) => {
-    try {
-        const token = localStorage.getItem('token');
-        if (!token) {
-            throw new Error('Authentication token not found. Please log in.');
-        }
-        const response = await axios.put(`${API_BASE_URL}/api/admin/courses/${courseId}/status`, 
-            { status }, 
+        if (!token) throw new Error('Authentication token not found. Please log in.');
+        const response = await axios.post(
+            `${API_BASE_URL}/api/materials/${materialId}/progress`,
+            { watched_duration_seconds },
             {
                 headers: {
                     Authorization: `Bearer ${token}`,
@@ -964,89 +978,540 @@ export const updateCourseStatus = async (courseId, status) => {
         );
         return response.data;
     } catch (error) {
-        console.error(`Error updating course status for ${courseId}:`, error);
-        throw error;
+        console.error(`Error updating video progress for material ${materialId}:`, error.response?.data);
+        throw new Error(error.response?.data?.message || 'Failed to update video progress');
     }
 };
 
 /**
- * Resets a user's password (admin only).
- * Requires a valid JWT token and admin role.
- * @param {string} userId - The ID of the user whose password to reset.
- * @returns {Promise<object>} A promise that resolves with the temporary password.
- * @throws {Error} Throws an error if reset fails.
+ * Fetches all quizzes for a specific course.
+ * @param {string} courseId - The ID of the course to fetch quizzes for.
+ * @returns {Promise<Array>} A promise that resolves with an array of quiz objects.
+ * @throws {Error} Throws an error if fetching quizzes fails.
  */
-export const resetUserPassword = async (userId) => {
+export const fetchCourseQuizzes = async (courseId) => {
     try {
         const token = localStorage.getItem('token');
-        if (!token) {
-            throw new Error('Authentication token not found. Please log in.');
-        }
-        const response = await axios.post(`${API_BASE_URL}/api/admin/users/${userId}/reset-password`, {}, {
+        if (!token) throw new Error('Authentication token not found. Please log in.');
+        const response = await axios.get(`${API_BASE_URL}/api/courses/${courseId}/quizzes`, {
+            headers: { Authorization: `Bearer ${token}` },
+        });
+        return response.data;
+    } catch (error) {
+        console.error(`Error fetching quizzes for course ${courseId}:`, error.response?.data);
+        throw new Error(error.response?.data?.message || 'Failed to fetch course quizzes');
+    }
+};
+
+/**
+ * Creates a new quiz for a course.
+ * @param {string} courseId - The ID of the course to create quiz for.
+ * @param {object} quizData - Object containing quiz details.
+ * @returns {Promise<object>} A promise that resolves with the created quiz data.
+ * @throws {Error} Throws an error if creation fails.
+ */
+export const createQuiz = async (courseId, quizData) => {
+    try {
+        const token = localStorage.getItem('token');
+        if (!token) throw new Error('Authentication token not found. Please log in.');
+        const response = await axios.post(`${API_BASE_URL}/api/courses/${courseId}/quizzes`, quizData, {
             headers: {
                 Authorization: `Bearer ${token}`,
+                'Content-Type': 'application/json',
             },
         });
         return response.data;
     } catch (error) {
-        console.error(`Error resetting password for user ${userId}:`, error);
-        throw error;
+        console.error(`Error creating quiz for course ${courseId}:`, error.response?.data);
+        throw new Error(error.response?.data?.message || 'Failed to create quiz');
     }
 };
 
 /**
- * Fetches system statistics (admin only).
- * Requires a valid JWT token and admin role.
- * @returns {Promise<object>} A promise that resolves with system statistics.
- * @throws {Error} Throws an error if fetching statistics fails.
+ * Updates an existing quiz.
+ * @param {string} courseId - The ID of the course the quiz belongs to.
+ * @param {string} quizId - The ID of the quiz to update.
+ * @param {object} quizData - Object containing updated quiz details.
+ * @returns {Promise<object>} A promise that resolves with the updated quiz data.
+ * @throws {Error} Throws an error if update fails.
  */
-export const fetchSystemStatistics = async () => {
+export const updateQuiz = async (courseId, quizId, quizData) => {
     try {
         const token = localStorage.getItem('token');
-        if (!token) {
-            throw new Error('Authentication token not found. Please log in.');
-        }
-        const response = await axios.get(`${API_BASE_URL}/api/admin/statistics`, {
+        if (!token) throw new Error('Authentication token not found. Please log in.');
+        const response = await axios.put(`${API_BASE_URL}/api/courses/${courseId}/quizzes/${quizId}`, quizData, {
             headers: {
                 Authorization: `Bearer ${token}`,
+                'Content-Type': 'application/json',
             },
         });
         return response.data;
     } catch (error) {
-        console.error('Error fetching system statistics:', error);
-        throw error;
+        console.error(`Error updating quiz ${quizId}:`, error.response?.data);
+        throw new Error(error.response?.data?.message || 'Failed to update quiz');
     }
 };
 
 /**
- * Admin login function (separate from regular login).
- * @param {string} email - Admin email.
- * @param {string} password - Admin password.
- * @returns {Promise<object>} A promise that resolves with admin token and user data.
- * @throws {Error} Throws an error if admin login fails.
+ * Deletes a quiz.
+ * @param {string} courseId - The ID of the course the quiz belongs to.
+ * @param {string} quizId - The ID of the quiz to delete.
+ * @returns {Promise<object>} A promise that resolves with a success message.
+ * @throws {Error} Throws an error if deletion fails.
  */
-export const adminLogin = async (email, password) => {
+export const deleteQuiz = async (courseId, quizId) => {
     try {
-        const response = await axios.post(`${API_BASE_URL}/api/auth/admin-login`, {
-            email,
-            password
+        const token = localStorage.getItem('token');
+        if (!token) throw new Error('Authentication token not found. Please log in.');
+        const response = await axios.delete(`${API_BASE_URL}/api/courses/${courseId}/quizzes/${quizId}`, {
+            headers: { Authorization: `Bearer ${token}` },
         });
-        
-        // Store token and user data if login successful
-        if (response.data.token) {
-            localStorage.setItem('token', response.data.token);
-            localStorage.setItem('user', JSON.stringify(response.data.user));
-            setAuthToken(response.data.token);
-        }
-        
         return response.data;
     } catch (error) {
-        console.error('Admin login error:', error);
-        throw error;
+        console.error(`Error deleting quiz ${quizId}:`, error.response?.data);
+        throw new Error(error.response?.data?.message || 'Failed to delete quiz');
     }
 };
 
-// Utility Functions for the admin dashboard
+/**
+ * Fetches all questions for a specific quiz.
+ * @param {string} quizId - The ID of the quiz to fetch questions for.
+ * @returns {Promise<Array>} A promise that resolves with an array of question objects.
+ * @throws {Error} Throws an error if fetching questions fails.
+ */
+export const fetchQuizQuestions = async (quizId) => {
+    try {
+        const token = localStorage.getItem('token');
+        if (!token) throw new Error('Authentication token not found. Please log in.');
+        const response = await axios.get(`${API_BASE_URL}/api/quizzes/${quizId}/questions`, {
+            headers: { Authorization: `Bearer ${token}` },
+        });
+        return response.data;
+    } catch (error) {
+        console.error(`Error fetching questions for quiz ${quizId}:`, error.response?.data);
+        throw new Error(error.response?.data?.message || 'Failed to fetch quiz questions');
+    }
+};
+
+/**
+ * Creates a new question for a quiz.
+ * @param {string} quizId - The ID of the quiz to create question for.
+ * @param {object} questionData - Object containing question details and options.
+ * @returns {Promise<object>} A promise that resolves with the created question data.
+ * @throws {Error} Throws an error if creation fails.
+ */
+export const createQuizQuestion = async (quizId, questionData) => {
+    try {
+        const token = localStorage.getItem('token');
+        if (!token) throw new Error('Authentication token not found. Please log in.');
+        const response = await axios.post(`${API_BASE_URL}/api/quizzes/${quizId}/questions`, questionData, {
+            headers: {
+                Authorization: `Bearer ${token}`,
+                'Content-Type': 'application/json',
+            },
+        });
+        return response.data;
+    } catch (error) {
+        console.error(`Error creating question for quiz ${quizId}:`, error.response?.data);
+        throw new Error(error.response?.data?.message || 'Failed to create quiz question');
+    }
+};
+
+/**
+ * Updates an existing quiz question.
+ * @param {string} quizId - The ID of the quiz the question belongs to.
+ * @param {string} questionId - The ID of the question to update.
+ * @param {object} questionData - Object containing updated question details.
+ * @returns {Promise<object>} A promise that resolves with the updated question data.
+ * @throws {Error} Throws an error if update fails.
+ */
+export const updateQuizQuestion = async (quizId, questionId, questionData) => {
+    try {
+        const token = localStorage.getItem('token');
+        if (!token) throw new Error('Authentication token not found. Please log in.');
+        const response = await axios.put(`${API_BASE_URL}/api/quizzes/${quizId}/questions/${questionId}`, questionData, {
+            headers: {
+                Authorization: `Bearer ${token}`,
+                'Content-Type': 'application/json',
+            },
+        });
+        return response.data;
+    } catch (error) {
+        console.error(`Error updating question ${questionId}:`, error.response?.data);
+        throw new Error(error.response?.data?.message || 'Failed to update quiz question');
+    }
+};
+
+/**
+ * Deletes a quiz question.
+ * @param {string} quizId - The ID of the quiz the question belongs to.
+ * @param {string} questionId - The ID of the question to delete.
+ * @returns {Promise<object>} A promise that resolves with a success message.
+ * @throws {Error} Throws an error if deletion fails.
+ */
+export const deleteQuizQuestion = async (quizId, questionId) => {
+    try {
+        const token = localStorage.getItem('token');
+        if (!token) throw new Error('Authentication token not found. Please log in.');
+        const response = await axios.delete(`${API_BASE_URL}/api/quizzes/${quizId}/questions/${questionId}`, {
+            headers: { Authorization: `Bearer ${token}` },
+        });
+        return response.data;
+    } catch (error) {
+        console.error(`Error deleting question ${questionId}:`, error.response?.data);
+        throw new Error(error.response?.data?.message || 'Failed to delete quiz question');
+    }
+};
+
+/**
+ * Submits a quiz attempt with user answers.
+ * @param {string} quizId - The ID of the quiz being submitted.
+ * @param {object} answers - Object containing question IDs as keys and user answers as values.
+ * @param {string} startedAt - ISO string of when the quiz was started.
+ * @returns {Promise<object>} A promise that resolves with the attempt results.
+ * @throws {Error} Throws an error if submission fails.
+ */
+export const submitQuizAttempt = async (quizId, answers, startedAt) => {
+    try {
+        const token = localStorage.getItem('token');
+        if (!token) throw new Error('Authentication token not found. Please log in.');
+        const response = await axios.post(
+            `${API_BASE_URL}/api/quizzes/${quizId}/submit`,
+            { answers, started_at: startedAt },
+            {
+                headers: {
+                    Authorization: `Bearer ${token}`,
+                    'Content-Type': 'application/json',
+                },
+            }
+        );
+        return response.data;
+    } catch (error) {
+        console.error(`Error submitting quiz ${quizId}:`, error.response?.data);
+        throw new Error(error.response?.data?.message || 'Failed to submit quiz attempt');
+    }
+};
+
+/**
+ * Fetches quiz attempts for a user in a specific course.
+ * @param {string} courseId - The ID of the course to fetch attempts for.
+ * @returns {Promise<Array>} A promise that resolves with an array of attempt objects.
+ * @throws {Error} Throws an error if fetching attempts fails.
+ */
+export const fetchUserQuizAttempts = async (courseId) => {
+    try {
+        const token = localStorage.getItem('token');
+        if (!token) throw new Error('Authentication token not found. Please log in.');
+        const response = await axios.get(`${API_BASE_URL}/api/courses/${courseId}/quiz-attempts`, {
+            headers: { Authorization: `Bearer ${token}` },
+        });
+        return response.data;
+    } catch (error) {
+        console.error(`Error fetching quiz attempts for course ${courseId}:`, error.response?.data);
+        throw new Error(error.response?.data?.message || 'Failed to fetch quiz attempts');
+    }
+};
+
+/**
+ * Checks if a user has completed all quizzes for a course with passing scores.
+ * @param {string} courseId - The ID of the course to check quiz completion for.
+ * @param {string} [userId] - The ID of the user (optional, defaults to current user).
+ * @returns {Promise<boolean>} A promise that resolves to true if all quizzes are completed with passing scores, false otherwise.
+ * @throws {Error} Throws an error if checking quiz completion fails (except 404, which returns false).
+ */
+export const checkQuizCompletion = async (courseId, userId = getCurrentUser()?.id) => {
+    try {
+        const token = localStorage.getItem('token');
+        if (!token) throw new Error('Authentication token not found. Please log in.');
+        if (!userId) throw new Error('User ID not found. Please ensure you are logged in or provide a valid userId.');
+        if (!courseId) throw new Error('Course ID is required.');
+        
+        const response = await axios.get(`${API_BASE_URL}/api/courses/${courseId}/quiz-attempts`, {
+            headers: { Authorization: `Bearer ${token}` },
+            params: { user_id: userId },
+        });
+        
+        const attempts = response.data || [];
+        
+        // If no attempts, quizzes are not completed
+        if (attempts.length === 0) {
+            return false;
+        }
+        
+        // Check if all attempts have passing scores
+        // The backend returns score and passing_score for each attempt
+        const allPassed = attempts.every(attempt => {
+            const score = parseFloat(attempt.score) || 0;
+            const passingScore = parseFloat(attempt.passing_score) || 0;
+            return score >= passingScore;
+        });
+        
+        return allPassed;
+        
+    } catch (error) {
+        console.error(`Error checking quiz completion for course ${courseId}, user ${userId}:`, error.response?.data);
+        
+        // If it's a 404 or 400, return false (no attempts found)
+        if (error.response?.status === 404 || error.response?.status === 400) {
+            return false;
+        }
+        
+        throw new Error(error.response?.data?.message || 'Failed to check quiz completion');
+    }
+};
+
+export const checkCertificateStatus = async (courseId, userId = getCurrentUser()?.id) => {
+    try {
+        const token = localStorage.getItem('token');
+        if (!token) throw new Error('Authentication token not found. Please log in.');
+        if (!userId) throw new Error('User ID not found.');
+        if (!courseId) throw new Error('Course ID is required.');
+        
+        const response = await axios.get(
+            `${API_BASE_URL}/api/courses/${courseId}/certificate/status`, 
+            {
+                headers: { Authorization: `Bearer ${token}` },
+                params: { user_id: userId }
+            }
+        );
+        
+        return response.data;
+    } catch (error) {
+        console.error(`Error checking certificate status:`, error);
+        if (error.response?.status === 404) {
+            return { exists: false, certificate: null };
+        }
+        throw new Error(error.response?.data?.message || 'Failed to check certificate status');
+    }
+};
+
+export const checkCertificateEligibility = async (courseId) => {
+    try {
+        const token = localStorage.getItem('token');
+        if (!token) throw new Error('Authentication token not found. Please log in.');
+        
+        const response = await axios.get(
+            `${API_BASE_URL}/api/courses/${courseId}/certificate/eligibility`,
+            { headers: { Authorization: `Bearer ${token}` } }
+        );
+        
+        return response.data;
+    } catch (error) {
+        console.error('Error checking eligibility:', error);
+        throw new Error(error.response?.data?.message || 'Failed to check eligibility');
+    }
+};
+
+export const generateCertificate = async (courseId, userId = getCurrentUser()?.id) => {
+    try {
+        const token = localStorage.getItem('token');
+        if (!token) throw new Error('Authentication token not found. Please log in.');
+        if (!userId) throw new Error('User ID not found.');
+        if (!courseId) throw new Error('Course ID is required.');
+        
+        console.log('📜 Generating certificate for:', { courseId, userId });
+        
+        // Check if certificate already exists
+        const status = await checkCertificateStatus(courseId, userId);
+        if (status.exists) {
+            console.log('✅ Certificate already exists');
+            return status.certificate;
+        }
+        
+        // Generate new certificate
+        const response = await axios.post(
+            `${API_BASE_URL}/api/courses/${courseId}/certificate`,
+            { user_id: userId },
+            {
+                headers: {
+                    Authorization: `Bearer ${token}`,
+                    'Content-Type': 'application/json',
+                }
+            }
+        );
+        
+        console.log('✅ Certificate generated:', response.data);
+        return response.data.certificate;
+        
+    } catch (error) {
+        console.error('❌ Error generating certificate:', error);
+        
+        let errorMessage = 'Certificate generation failed';
+        
+        if (error.response) {
+            const status = error.response.status;
+            if (status === 400) {
+                errorMessage = error.response.data?.message || 'Invalid request. Check if course is completed.';
+            } else if (status === 403) {
+                errorMessage = 'Access denied. You may not be enrolled in this course.';
+            } else if (status === 500) {
+                errorMessage = 'Server error. Please try again later.';
+            } else {
+                errorMessage = error.response.data?.message || errorMessage;
+            }
+        }
+        
+        throw new Error(errorMessage);
+    }
+};
+
+export const downloadCertificate = async (courseId, userId = getCurrentUser()?.id) => {
+    try {
+        const token = localStorage.getItem('token');
+        if (!token) throw new Error('Authentication token not found. Please log in.');
+        if (!userId) throw new Error('User ID not found.');
+        if (!courseId) throw new Error('Course ID is required.');
+        
+        console.log(`📥 Starting certificate download for course ${courseId}, user ${userId}`);
+        
+        // Step 1: Check if certificate exists
+        const status = await checkCertificateStatus(courseId, userId);
+        
+        if (!status.exists) {
+            console.log('📜 Certificate does not exist, generating...');
+            
+            // Try to generate certificate
+            try {
+                await generateCertificate(courseId, userId);
+                console.log('✅ Certificate generated successfully');
+            } catch (genError) {
+                console.error('❌ Failed to generate certificate:', genError);
+                throw new Error('Failed to generate certificate: ' + genError.message);
+            }
+        } else {
+            console.log('✅ Certificate already exists');
+        }
+        
+        // Step 2: Download the certificate
+        console.log('⬇️ Downloading certificate...');
+        
+        const response = await axios.get(
+            `${API_BASE_URL}/api/courses/${courseId}/certificate/${userId}/download`, 
+            {
+                headers: { Authorization: `Bearer ${token}` },
+                responseType: 'blob',
+            }
+        );
+        
+        console.log('✅ Certificate download response received');
+        
+        // Create blob and trigger download
+        const blob = new Blob([response.data], { type: 'application/pdf' });
+        const url = window.URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `certificate-course-${courseId}.pdf`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        window.URL.revokeObjectURL(url);
+        
+        console.log('✅ Certificate download triggered successfully');
+        
+    } catch (error) {
+        console.error(`❌ Error downloading certificate:`, error);
+        
+        let errorMessage = 'Certificate download failed';
+        
+        if (error.response) {
+            const status = error.response.status;
+            
+            // Handle blob error responses
+            if (error.response.data instanceof Blob) {
+                try {
+                    const text = await error.response.data.text();
+                    const jsonError = JSON.parse(text);
+                    errorMessage = jsonError.message || errorMessage;
+                } catch (parseError) {
+                    // Use status-based messages if parsing fails
+                    if (status === 401) errorMessage = 'Unauthorized. Please log in again.';
+                    else if (status === 403) errorMessage = 'Access denied.';
+                    else if (status === 404) errorMessage = 'Certificate not found. Please complete the course first.';
+                    else if (status === 500) errorMessage = 'Server error. Please try again later.';
+                }
+            } else {
+                errorMessage = error.response.data?.message || errorMessage;
+            }
+        } else if (error.request) {
+            errorMessage = 'No response from server. Check your connection.';
+        } else {
+            errorMessage = error.message;
+        }
+        
+        throw new Error(errorMessage);
+    }
+};
+
+export const fetchUserCertificates = async (userId = getCurrentUser()?.id) => {
+    try {
+        const token = localStorage.getItem('token');
+        if (!token) throw new Error('Authentication token not found. Please log in.');
+        
+        const response = await axios.get(`${API_BASE_URL}/api/certificates`, {
+            headers: { Authorization: `Bearer ${token}` },
+        });
+        
+        return response.data.certificates || [];
+    } catch (error) {
+        console.error('Error fetching certificates:', error);
+        throw new Error(error.response?.data?.message || 'Failed to fetch certificates');
+    }
+};
+
+export const verifyCertificate = async ({ certificateNumber, certificateHash }) => {
+    try {
+        if (!certificateNumber && !certificateHash) {
+            throw new Error('Certificate number or hash is required for verification.');
+        }
+        
+        const response = await axios.get(`${API_BASE_URL}/api/certificates/verify`, {
+            params: { 
+                certificate_number: certificateNumber, 
+                certificate_hash: certificateHash 
+            },
+        });
+        
+        return response.data;
+    } catch (error) {
+        console.error('Error verifying certificate:', error);
+        throw new Error(error.response?.data?.message || 'Certificate verification failed');
+    }
+};
+
+// Force generate certificate (bypasses progress check)
+await fetch('http://localhost:5000/api/debug/generate-certificate/3/3', {
+    method: 'POST',
+    headers: { 
+        'Authorization': `Bearer ${localStorage.getItem('token')}` 
+    }
+})
+.then(r => r.json())
+.then(data => {
+    console.log('Certificate generated:', data);
+    if (data.certificate?.download_url) {
+        window.location.href = data.certificate.download_url;
+    }
+});
+
+/**
+ * Fetches analytics for a specific course (admin or instructor only).
+ * @param {string} courseId - The ID of the course to fetch analytics for.
+ * @returns {Promise<object>} A promise that resolves with course analytics data (e.g., enrollments, completion rates).
+ * @throws {Error} Throws an error if fetching analytics fails.
+ */
+export const fetchCourseAnalytics = async (courseId) => {
+    try {
+        const token = localStorage.getItem('token');
+        if (!token) throw new Error('Authentication token not found. Please log in.');
+        const response = await axios.get(`${API_BASE_URL}/api/courses/${courseId}/analytics`, {
+            headers: { Authorization: `Bearer ${token}` },
+        });
+        return response.data;
+    } catch (error) {
+        console.error(`Error fetching analytics for course ${courseId}:`, error.response?.data);
+        throw new Error(error.response?.data?.message || 'Failed to fetch course analytics');
+    }
+};
 
 /**
  * Format currency for display.
@@ -1057,7 +1522,7 @@ export const adminLogin = async (email, password) => {
 export const formatCurrency = (amount, currency = 'USD') => {
     return new Intl.NumberFormat('en-US', {
         style: 'currency',
-        currency: currency
+        currency: currency,
     }).format(amount);
 };
 
@@ -1071,7 +1536,7 @@ export const formatDate = (date, options = {}) => {
     const defaultOptions = {
         year: 'numeric',
         month: 'short',
-        day: 'numeric'
+        day: 'numeric',
     };
     return new Date(date).toLocaleDateString('en-US', { ...defaultOptions, ...options });
 };
@@ -1113,7 +1578,7 @@ export const getCurrentUser = () => {
 export const clearAuthData = () => {
     localStorage.removeItem('token');
     localStorage.removeItem('user');
-    delete axios.defaults.headers.common['Authorization'];
+    setAuthToken(null);
 };
 
 /**
@@ -1134,381 +1599,65 @@ export const debounce = (func, wait) => {
     };
 };
 
-
-
-
-// Updated api.js - Add these new functions at the end of the file
+/**
+ * @deprecated Use scheduleOnlineClass instead
+ */
+export const createOnlineClass = async (courseId, classData) => {
+    console.warn('createOnlineClass is deprecated. Use scheduleOnlineClass instead.');
+    return await scheduleOnlineClass({ ...classData, course_id: courseId });
+};
 
 /**
- * Fetches video progress for a specific course.
- * @param {string} courseId - The ID of the course to fetch progress for.
- * @returns {Promise<Array>} A promise that resolves with an array of progress objects.
- * @throws {Error} Throws an error if fetching progress fails.
+ * @deprecated Use updateClassStatus instead
  */
-export const fetchVideoProgress = async (courseId) => {
+export const updateOnlineClass = async (courseId, classId, updateData) => {
+    console.warn('updateOnlineClass is deprecated. Use updateClassStatus instead.');
+    if (updateData.status) return await updateClassStatus(classId, updateData.status);
+    throw new Error('Only status updates are supported through this function');
+};
+
+/**
+ * @deprecated Direct class deletion not supported in new system
+ */
+export const deleteOnlineClass = async (courseId, classId) => {
+    console.warn('deleteOnlineClass is deprecated. Use updateClassStatus with "cancelled" status instead.');
+    return await updateClassStatus(classId, 'cancelled');
+};
+
+// Reviews
+export const fetchCourseReviews = async (courseId) => {
     try {
-        const token = localStorage.getItem('token');
-        if (!token) {
-            throw new Error('Authentication token not found. Please log in.');
-        }
-        const response = await axios.get(`${API_BASE_URL}/api/courses/${courseId}/progress`, {
-            headers: {
-                Authorization: `Bearer ${token}`,
-            },
-        });
-        return response.data.progress;
+      const response = await api.get(`/courses/${courseId}/reviews`);
+      return response.data;
     } catch (error) {
-        console.error(`Error fetching video progress for course ${courseId}:`, error);
-        throw error;
+      handleError(error);
     }
-};
-
-/**
- * Updates video progress for a specific material.
- * @param {string} materialId - The ID of the video material.
- * @param {number} watched_duration_seconds - The watched duration in seconds.
- * @returns {Promise<object>} A promise that resolves with updated progress data.
- * @throws {Error} Throws an error if update fails.
- */
-export const updateVideoProgress = async (materialId, watched_duration_seconds) => {
+  };
+  
+  export const submitCourseReview = async (courseId, reviewData) => {
     try {
-        const token = localStorage.getItem('token');
-        if (!token) {
-            throw new Error('Authentication token not found. Please log in.');
-        }
-        const response = await axios.post(`${API_BASE_URL}/api/materials/${materialId}/progress`, 
-            { watched_duration_seconds }, 
-            {
-                headers: {
-                    Authorization: `Bearer ${token}`,
-                    'Content-Type': 'application/json',
-                },
-            }
-        );
-        return response.data;
+      const response = await api.post(`/courses/${courseId}/reviews`, reviewData);
+      return response.data;
     } catch (error) {
-        console.error(`Error updating video progress for material ${materialId}:`, error);
-        throw error;
+      handleError(error);
     }
-};
-
-// ==================== QUIZ API FUNCTIONS ====================
-// Replace the existing quiz functions in your api.js with these corrected versions
-
-/**
- * Fetches all quizzes for a specific course.
- * @param {string} courseId - The ID of the course to fetch quizzes for.
- * @returns {Promise<Array>} A promise that resolves with an array of quiz objects.
- * @throws {Error} Throws an error if fetching quizzes fails.
- */
-export const fetchCourseQuizzes = async (courseId) => {
+  };
+  
+  export const fetchFeaturedReviews = async () => {
     try {
-        const token = localStorage.getItem('token');
-        if (!token) {
-            throw new Error('Authentication token not found. Please log in.');
-        }
-        const response = await axios.get(`${API_BASE_URL}/api/courses/${courseId}/quizzes`, {
-            headers: {
-                Authorization: `Bearer ${token}`,
-            },
-        });
-        return response.data;
+      const response = await api.get('/reviews/featured');
+      return response.data;
     } catch (error) {
-        console.error(`Error fetching quizzes for course ${courseId}:`, error);
-        throw error;
+      handleError(error);
     }
-};
-
-/**
- * Creates a new quiz for a course.
- * @param {string} courseId - The ID of the course to create quiz for.
- * @param {object} quizData - Object containing quiz details.
- * @returns {Promise<object>} A promise that resolves with the created quiz data.
- * @throws {Error} Throws an error if creation fails.
- */
-export const createQuiz = async (courseId, quizData) => {
+  };
+  
+  export const replyToCourseReview = async (reviewId, replyText) => {
     try {
-        const token = localStorage.getItem('token');
-        if (!token) {
-            throw new Error('Authentication token not found. Please log in.');
-        }
-        const response = await axios.post(`${API_BASE_URL}/api/courses/${courseId}/quizzes`, quizData, {
-            headers: {
-                Authorization: `Bearer ${token}`,
-                'Content-Type': 'application/json',
-            },
-        });
-        return response.data;
+      const response = await api.post(`/reviews/${reviewId}/reply`, { reply: replyText });
+      return response.data;
     } catch (error) {
-        console.error(`Error creating quiz for course ${courseId}:`, error);
-        throw error;
+      handleError(error);
     }
-};
-
-/**
- * Updates an existing quiz.
- * @param {string} courseId - The ID of the course the quiz belongs to.
- * @param {string} quizId - The ID of the quiz to update.
- * @param {object} quizData - Object containing updated quiz details.
- * @returns {Promise<object>} A promise that resolves with the updated quiz data.
- * @throws {Error} Throws an error if update fails.
- */
-export const updateQuiz = async (courseId, quizId, quizData) => {
-    try {
-        const token = localStorage.getItem('token');
-        if (!token) {
-            throw new Error('Authentication token not found. Please log in.');
-        }
-        const response = await axios.put(`${API_BASE_URL}/api/courses/${courseId}/quizzes/${quizId}`, quizData, {
-            headers: {
-                Authorization: `Bearer ${token}`,
-                'Content-Type': 'application/json',
-            },
-        });
-        return response.data;
-    } catch (error) {
-        console.error(`Error updating quiz ${quizId}:`, error);
-        throw error;
-    }
-};
-
-/**
- * Deletes a quiz.
- * @param {string} courseId - The ID of the course the quiz belongs to.
- * @param {string} quizId - The ID of the quiz to delete.
- * @returns {Promise<object>} A promise that resolves with a success message.
- * @throws {Error} Throws an error if deletion fails.
- */
-export const deleteQuiz = async (courseId, quizId) => {
-    try {
-        const token = localStorage.getItem('token');
-        if (!token) {
-            throw new Error('Authentication token not found. Please log in.');
-        }
-        const response = await axios.delete(`${API_BASE_URL}/api/courses/${courseId}/quizzes/${quizId}`, {
-            headers: {
-                Authorization: `Bearer ${token}`,
-            },
-        });
-        return response.data;
-    } catch (error) {
-        console.error(`Error deleting quiz ${quizId}:`, error);
-        throw error;
-    }
-};
-
-/**
- * Fetches all questions for a specific quiz.
- * @param {string} quizId - The ID of the quiz to fetch questions for.
- * @returns {Promise<Array>} A promise that resolves with an array of question objects.
- * @throws {Error} Throws an error if fetching questions fails.
- */
-export const fetchQuizQuestions = async (quizId) => {
-    try {
-        const token = localStorage.getItem('token');
-        if (!token) {
-            throw new Error('Authentication token not found. Please log in.');
-        }
-        const response = await axios.get(`${API_BASE_URL}/api/quizzes/${quizId}/questions`, {
-            headers: {
-                Authorization: `Bearer ${token}`,
-            },
-        });
-        return response.data;
-    } catch (error) {
-        console.error(`Error fetching questions for quiz ${quizId}:`, error);
-        throw error;
-    }
-};
-
-/**
- * Creates a new question for a quiz.
- * @param {string} quizId - The ID of the quiz to create question for.
- * @param {object} questionData - Object containing question details and options.
- * @returns {Promise<object>} A promise that resolves with the created question data.
- * @throws {Error} Throws an error if creation fails.
- */
-export const createQuizQuestion = async (quizId, questionData) => {
-    try {
-        const token = localStorage.getItem('token');
-        if (!token) {
-            throw new Error('Authentication token not found. Please log in.');
-        }
-        const response = await axios.post(`${API_BASE_URL}/api/quizzes/${quizId}/questions`, questionData, {
-            headers: {
-                Authorization: `Bearer ${token}`,
-                'Content-Type': 'application/json',
-            },
-        });
-        return response.data;
-    } catch (error) {
-        console.error(`Error creating question for quiz ${quizId}:`, error);
-        throw error;
-    }
-};
-
-/**
- * Updates an existing quiz question.
- * @param {string} quizId - The ID of the quiz the question belongs to.
- * @param {string} questionId - The ID of the question to update.
- * @param {object} questionData - Object containing updated question details.
- * @returns {Promise<object>} A promise that resolves with the updated question data.
- * @throws {Error} Throws an error if update fails.
- */
-export const updateQuizQuestion = async (quizId, questionId, questionData) => {
-    try {
-        const token = localStorage.getItem('token');
-        if (!token) {
-            throw new Error('Authentication token not found. Please log in.');
-        }
-        const response = await axios.put(`${API_BASE_URL}/api/quizzes/${quizId}/questions/${questionId}`, questionData, {
-            headers: {
-                Authorization: `Bearer ${token}`,
-                'Content-Type': 'application/json',
-            },
-        });
-        return response.data;
-    } catch (error) {
-        console.error(`Error updating question ${questionId}:`, error);
-        throw error;
-    }
-};
-
-/**
- * Deletes a quiz question.
- * @param {string} quizId - The ID of the quiz the question belongs to.
- * @param {string} questionId - The ID of the question to delete.
- * @returns {Promise<object>} A promise that resolves with a success message.
- * @throws {Error} Throws an error if deletion fails.
- */
-export const deleteQuizQuestion = async (quizId, questionId) => {
-    try {
-        const token = localStorage.getItem('token');
-        if (!token) {
-            throw new Error('Authentication token not found. Please log in.');
-        }
-        const response = await axios.delete(`${API_BASE_URL}/api/quizzes/${quizId}/questions/${questionId}`, {
-            headers: {
-                Authorization: `Bearer ${token}`,
-            },
-        });
-        return response.data;
-    } catch (error) {
-        console.error(`Error deleting question ${questionId}:`, error);
-        throw error;
-    }
-};
-
-/**
- * Submits a quiz attempt with user answers.
- * @param {string} quizId - The ID of the quiz being submitted.
- * @param {object} answers - Object containing question IDs as keys and user answers as values.
- * @param {string} startedAt - ISO string of when the quiz was started.
- * @returns {Promise<object>} A promise that resolves with the attempt results.
- * @throws {Error} Throws an error if submission fails.
- */
-export const submitQuizAttempt = async (quizId, answers, startedAt) => {
-    try {
-        const token = localStorage.getItem('token');
-        if (!token) {
-            throw new Error('Authentication token not found. Please log in.');
-        }
-        const response = await axios.post(`${API_BASE_URL}/api/quizzes/${quizId}/submit`, {
-            answers,
-            started_at: startedAt
-        }, {
-            headers: {
-                Authorization: `Bearer ${token}`,
-                'Content-Type': 'application/json',
-            },
-        });
-        return response.data;
-    } catch (error) {
-        console.error(`Error submitting quiz ${quizId}:`, error);
-        throw error;
-    }
-};
-
-/**
- * Fetches quiz attempts for a user in a specific course.
- * @param {string} courseId - The ID of the course to fetch attempts for.
- * @returns {Promise<Array>} A promise that resolves with an array of attempt objects.
- * @throws {Error} Throws an error if fetching attempts fails.
- */
-export const fetchUserQuizAttempts = async (courseId) => {
-    try {
-        const token = localStorage.getItem('token');
-        if (!token) {
-            throw new Error('Authentication token not found. Please log in.');
-        }
-        const response = await axios.get(`${API_BASE_URL}/api/courses/${courseId}/quiz-attempts`, {
-            headers: {
-                Authorization: `Bearer ${token}`,
-            },
-        });
-        return response.data;
-    } catch (error) {
-        console.error(`Error fetching quiz attempts for course ${courseId}:`, error);
-        throw error;
-    }
-};
-
-/**
- * Generates a certificate for a user who has completed all quizzes in a course.
- * @param {string} courseId - The ID of the course to generate certificate for.
- * @returns {Promise<object>} A promise that resolves with certificate data.
- * @throws {Error} Throws an error if generation fails.
- */
-export const generateCertificate = async (courseId) => {
-    try {
-        const token = localStorage.getItem('token');
-        if (!token) {
-            throw new Error('Authentication token not found. Please log in.');
-        }
-        const response = await axios.post(`${API_BASE_URL}/api/courses/${courseId}/certificate`, {}, {
-            headers: {
-                Authorization: `Bearer ${token}`,
-                'Content-Type': 'application/json',
-            },
-        });
-        return response.data;
-    } catch (error) {
-        console.error(`Error generating certificate for course ${courseId}:`, error);
-        throw error;
-    }
-};
-
-/**
- * Downloads a certificate for a user.
- * @param {string} courseId - The ID of the course.
- * @param {string} userId - The ID of the user.
- */
-export const downloadCertificate = (courseId, userId) => {
-    const token = localStorage.getItem('token');
-    window.open(`${API_BASE_URL}/api/courses/${courseId}/certificate/${userId}/download?token=${token}`, '_blank');
-};
-
-/**
- * Fetches all certificates for a user.
- * @param {string} userId - The ID of the user to fetch certificates for.
- * @returns {Promise<Array>} A promise that resolves with an array of certificate objects.
- * @throws {Error} Throws an error if fetching certificates fails.
- */
-export const fetchUserCertificates = async (userId) => {
-    try {
-        const token = localStorage.getItem('token');
-        if (!token) {
-            throw new Error('Authentication token not found. Please log in.');
-        }
-        const response = await axios.get(`${API_BASE_URL}/api/users/${userId}/certificates`, {
-            headers: {
-                Authorization: `Bearer ${token}`,
-            },
-        });
-        return response.data;
-    } catch (error) {
-        console.error(`Error fetching certificates for user ${userId}:`, error);
-        throw error;
-    }
-};
-
+  };
+  

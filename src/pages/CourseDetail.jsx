@@ -712,13 +712,13 @@ Could you rephrase your question or ask about a specific aspect of the course? I
                 if (quizAnswers[q.id] === q.correct_answer) correct++;
             });
             const score_percentage = (correct / selectedQuiz.questions.length) * 100;
-            let message = `Your score: ${score_percentage.toFixed(2)}% (calculated locally due to submission error)`;
+            let message = `Your score: ${score_percentage.toFixed(2)}%`;
             let earnedCert = false;
             if (score_percentage >= 80) {
                 message += '. You qualify for a certificate! Please try submitting again.';
                 earnedCert = true;
             } else {
-                message += '. Score less than 80%. Try again!';
+                message += ', Score less than 80%. Try again!';
             }
             setQuizSubmitMessage(message);
             setCertificateEarned(earnedCert);
@@ -726,6 +726,8 @@ Could you rephrase your question or ask about a specific aspect of the course? I
             setShowResults(true);
         }
     };
+
+    
 
     // NEW: Parse options from explanation
     const parseOptions = (explanation) => {
@@ -777,7 +779,7 @@ Could you rephrase your question or ask about a specific aspect of the course? I
                         <div className="flex items-center">
                             <Link to="/" className="inline-flex items-center text-blue-600 hover:text-blue-800 transition-colors duration-200">
                                 <BookOpen className="h-8 w-8" />
-                                <span className="ml-2 text-xl font-bold text-gray-900">EduPlatform</span>
+                                <span className="ml-2 text-xl font-bold text-gray-900">EduCore</span>
                             </Link>
                         </div>
 

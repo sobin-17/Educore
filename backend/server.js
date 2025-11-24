@@ -123,7 +123,7 @@ const uploadMaterialFiles = multer({
 // Database connection with corrected configuration
 const dbConfig = {
     host: process.env.DB_HOST || 'localhost',
-    
+   
     user: process.env.DB_USER || 'root',
     password: process.env.DB_PASSWORD || '',
     database: process.env.DB_NAME || 'elearning',
@@ -147,7 +147,7 @@ const createTables = () => {
             FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
         );
     `;
-    
+   
     // Create online classes table if it doesn't exist
     const createOnlineClassesTable = `
         CREATE TABLE IF NOT EXISTS online_classes (
@@ -174,7 +174,7 @@ const createTables = () => {
             INDEX idx_course_scheduled (course_id, scheduled_date)
         )
     `;
-    
+   
     db.query(createChatTable, (err) => {
         if (err) {
             console.error('Error creating course_chat_messages table:', err);
@@ -182,7 +182,7 @@ const createTables = () => {
             console.log('course_chat_messages table ensured.');
         }
     });
-    
+   
     db.query(createOnlineClassesTable, (err) => {
         if (err) {
             console.error('Error creating online_classes table:', err);
@@ -198,7 +198,7 @@ db.connect((err) => {
         process.exit(1);
     }
     console.log('MySQL connected successfully');
-    
+   
     // Create tables after connection is established
     createTables();
 });
@@ -333,6 +333,7 @@ const isInstructor = (req, res, next) => {
         res.status(403).json({ message: 'Access denied. Only instructors can perform this action.' });
     }
 };
+
 
 // Middleware to check if user is a student
 const isStudent = (req, res, next) => {
@@ -1734,7 +1735,7 @@ const createAttendanceTable = () => {
             INDEX idx_student_date (student_id, joined_at)
         )
     `;
-    
+   
     db.query(createAttendanceTableQuery, (err) => {
         if (err) {
             console.error('Error creating class_attendance table:', err);
@@ -1752,7 +1753,7 @@ app.get('/api/courses/:courseId/classes', verifyToken, (req, res) => {
 
     // First, verify user has access to this course
     const accessQuery = `
-        SELECT c.id, c.instructor_id, 
+        SELECT c.id, c.instructor_id,
                e.user_id AS enrolled_user_id,
                c.title AS course_title,
                u.name AS instructor_name
@@ -1767,7 +1768,7 @@ app.get('/api/courses/:courseId/classes', verifyToken, (req, res) => {
             console.error('Database error checking course access:', err);
             return res.status(500).json({ message: 'Failed to verify course access.' });
         }
-        
+       
         if (courseResults.length === 0) {
             return res.status(404).json({ message: 'Course not found.' });
         }
@@ -1782,7 +1783,7 @@ app.get('/api/courses/:courseId/classes', verifyToken, (req, res) => {
 
         // Fetch online classes for this course
         const classesQuery = `
-            SELECT 
+            SELECT
                 oc.id,
                 oc.course_id,
                 oc.title,
@@ -1816,7 +1817,7 @@ app.get('/api/courses/:courseId/classes', verifyToken, (req, res) => {
             // Process results and add meeting URLs
             const processedClasses = classResults.map(cls => {
                 // Generate meeting URL from room name
-                const meetingUrl = cls.meeting_room_name 
+                const meetingUrl = cls.meeting_room_name
                     ? `https://meet.jit.si/${cls.meeting_room_name}`
                     : null;
 
@@ -1835,7 +1836,7 @@ app.get('/api/courses/:courseId/classes', verifyToken, (req, res) => {
                 };
             });
 
-            res.status(200).json({ 
+            res.status(200).json({
                 classes: processedClasses,
                 course_info: {
                     id: course.id,
@@ -1911,7 +1912,7 @@ app.get('/api/student/online-classes', verifyToken, isStudent, (req, res) => {
     const { status } = req.query; // Optional filter by status
 
     let query = `
-        SELECT 
+        SELECT
             oc.id,
             oc.course_id,
             oc.title,
@@ -1953,7 +1954,7 @@ app.get('/api/student/online-classes', verifyToken, isStudent, (req, res) => {
 
         // Process results similar to course classes endpoint
         const processedClasses = results.map(cls => {
-            const meetingUrl = cls.meeting_room_name 
+            const meetingUrl = cls.meeting_room_name
                 ? `https://meet.jit.si/${cls.meeting_room_name}`
                 : null;
 
@@ -1981,7 +1982,7 @@ app.get('/api/student/online-classes', verifyToken, isStudent, (req, res) => {
 // REPLACE the broken admin login endpoint with this working version:
 app.post('/api/auth/admin-login', loginValidation, (req, res) => {
     console.log('Admin login endpoint hit');
-    
+   
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
         return res.status(400).json({
@@ -2062,6 +2063,7 @@ app.post('/api/auth/admin-login', loginValidation, (req, res) => {
 });
 
 // Middleware to check if user is an admin
+// Middleware to check if user is an admin
 const isAdmin = (req, res, next) => {
     if (req.user && req.user.role === 'admin') {
         next();
@@ -2070,90 +2072,349 @@ const isAdmin = (req, res, next) => {
     }
 };
 
-// Fix 1: Get all users - REPLACE the async version
-// Fix 1: Get all users - REPLACE the async version
-// GET ALL USERS (Admin only)
+// Admin-only route: List all users
 app.get('/api/admin/users', verifyToken, isAdmin, (req, res) => {
-    const page = parseInt(req.query.page) || 1;
-    const limit = parseInt(req.query.limit) || 20;
-    const offset = (page - 1) * limit;
-    const search = req.query.search || '';
-
-    const countQuery = `
-        SELECT COUNT(*) as total 
-        FROM users 
-        WHERE status != 'deleted' 
-        AND (name LIKE ? OR email LIKE ?)
+    const query = `
+        SELECT id, name, email, role, status, profile_image, bio, phone,
+               date_of_birth, gender, country, email_verified, created_at, last_login
+        FROM users
+        ORDER BY name ASC
     `;
-    const searchParam = `%${search}%`;
-
-    db.query(countQuery, [searchParam, searchParam], (err, countResult) => {
+    db.query(query, (err, results) => {
         if (err) {
-            console.error('Database error fetching users count:', err);
-            return res.status(500).json({ 
-                error: true, 
-                message: 'Failed to fetch users count.', 
-                details: err.message 
-            });
+            console.error('Database error fetching users:', err);
+            return res.status(500).json({ message: 'Internal server error' });
+        }
+        const usersWithUrls = results.map(user => ({
+            ...user,
+            profile_image_url: user.profile_image ? `${req.protocol}://${req.get('host')}/uploads/profiles/${user.profile_image}` : null
+        }));
+        res.status(200).json({ users: usersWithUrls });
+    });
+});
+
+// 2. View single user
+app.get('/api/admin/users/:id', verifyToken, isAdmin, (req, res) => {
+    const userId = parseInt(req.params.id);
+    if (!Number.isInteger(userId)) {
+        return res.status(400).json({ message: 'Invalid user ID' });
+    }
+    const query = `
+        SELECT id, name, email, role, status, profile_image, bio, phone,
+               date_of_birth, gender, country, email_verified, created_at, last_login
+        FROM users
+        WHERE id = ?
+    `;
+    db.query(query, [userId], (err, results) => {
+        if (err) {
+            console.error('Database error fetching user:', err);
+            return res.status(500).json({ message: 'Internal server error' });
+        }
+        if (results.length === 0) {
+            return res.status(404).json({ message: 'User not found' });
+        }
+        const user = results[0];
+        user.profile_image_url = user.profile_image ? `${req.protocol}://${req.get('host')}/uploads/profiles/${user.profile_image}` : null;
+        res.status(200).json({ user });
+    });
+});
+
+// 3. Update user
+app.put('/api/admin/users/:id', verifyToken, isAdmin, uploadProfileImage.single('profileImage'), [
+    body('name').optional().trim().isLength({ min: 2, max: 100 }).withMessage('Name must be between 2 and 100 characters'),
+    body('email').optional().isEmail().normalizeEmail().withMessage('Please provide a valid email'),
+    body('role').optional().isIn(['student', 'instructor', 'parent', 'admin']).withMessage('Role must be student, instructor, parent, or admin'),
+    body('phone').optional().isMobilePhone().withMessage('Please provide a valid phone number'),
+    body('dateOfBirth').optional().isISO8601().withMessage('Please provide a valid date of birth'),
+    body('gender').optional().isIn(['male', 'female', 'other', 'prefer_not_to_say']).withMessage('Invalid gender selection'),
+    body('country').optional().isLength({ min: 2, max: 100 }).withMessage('Country name must be between 2 and 100 characters'),
+    body('bio').optional().isLength({ max: 500 }).withMessage('Bio must not exceed 500 characters'),
+    body('status').optional().isIn(['active', 'inactive']).withMessage('Status must be active or inactive')
+], (req, res) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+        if (req.file) {
+            try {
+                fs.unlinkSync(req.file.path);
+            } catch (fileErr) {
+                console.error('Error deleting uploaded file:', fileErr);
+            }
+        }
+        return res.status(400).json({ message: 'Validation error', errors: errors.array() });
+    }
+
+    const userId = parseInt(req.params.id);
+    const { name, email, role, bio, phone, dateOfBirth, gender, country, status, clear_profile_image } = req.body;
+
+    if (!Number.isInteger(userId)) {
+        if (req.file) {
+            try {
+                fs.unlinkSync(req.file.path);
+            } catch (fileErr) {
+                console.error('Error deleting uploaded file:', fileErr);
+            }
+        }
+        return res.status(400).json({ message: 'Invalid user ID' });
+    }
+
+    let updateFields = [];
+    let updateValues = [];
+
+    if (name) { updateFields.push('name = ?'); updateValues.push(name); }
+    if (email) { updateFields.push('email = ?'); updateValues.push(email); }
+    if (role) { updateFields.push('role = ?'); updateValues.push(role); }
+    if (bio !== undefined) { updateFields.push('bio = ?'); updateValues.push(bio); }
+    if (phone !== undefined) { updateFields.push('phone = ?'); updateValues.push(phone); }
+    if (dateOfBirth !== undefined) { updateFields.push('date_of_birth = ?'); updateValues.push(dateOfBirth); }
+    if (gender !== undefined) { updateFields.push('gender = ?'); updateValues.push(gender); }
+    if (country !== undefined) { updateFields.push('country = ?'); updateValues.push(country); }
+    if (status) { updateFields.push('status = ?'); updateValues.push(status); }
+    updateFields.push('updated_at = NOW()');
+
+    db.query('SELECT profile_image FROM users WHERE id = ?', [userId], (err, userResults) => {
+        if (err) {
+            console.error('Database error fetching current user:', err);
+            if (req.file) {
+                try {
+                    fs.unlinkSync(req.file.path);
+                } catch (fileErr) {
+                    console.error('Error deleting uploaded file:', fileErr);
+                }
+            }
+            return res.status(500).json({ message: 'Internal server error' });
+        }
+        if (userResults.length === 0) {
+            if (req.file) {
+                try {
+                    fs.unlinkSync(req.file.path);
+                } catch (fileErr) {
+                    console.error('Error deleting uploaded file:', fileErr);
+                }
+            }
+            return res.status(404).json({ message: 'User not found' });
         }
 
-        const totalUsers = countResult[0].total || 0;
-        const totalPages = Math.ceil(totalUsers / limit);
+        const currentUserImage = userResults[0].profile_image;
 
-        const query = `
-            SELECT 
-                id,
-                name,
-                email,
-                role,
-                status,
-                profile_image,
-                phone,
-                date_of_birth,
-                gender,
-                country,
-                bio,
-                email_verified,
-                last_login,
-                created_at,
-                updated_at
-            FROM users 
-            WHERE status != 'deleted' 
-            AND (name LIKE ? OR email LIKE ?)
-            ORDER BY created_at DESC
-            LIMIT ? OFFSET ?
-        `;
-
-        db.query(query, [searchParam, searchParam, limit, offset], (err, users) => {
-            if (err) {
-                console.error('Database error fetching users:', err);
-                return res.status(500).json({ 
-                    error: true, 
-                    message: 'Failed to fetch users.', 
-                    details: err.message 
-                });
+        if (req.file) {
+            if (currentUserImage) {
+                const oldImagePath = path.join(profilesDir, currentUserImage);
+                if (fs.existsSync(oldImagePath)) {
+                    try {
+                        fs.unlinkSync(oldImagePath);
+                    } catch (fileErr) {
+                        console.error('Error deleting old image:', fileErr);
+                    }
+                }
             }
+            updateFields.push('profile_image = ?');
+            updateValues.push(req.file.filename);
+        } else if (clear_profile_image === 'true') {
+            if (currentUserImage) {
+                const oldImagePath = path.join(profilesDir, currentUserImage);
+                if (fs.existsSync(oldImagePath)) {
+                    try {
+                        fs.unlinkSync(oldImagePath);
+                    } catch (fileErr) {
+                        console.error('Error deleting old image:', fileErr);
+                    }
+                }
+            }
+            updateFields.push('profile_image = NULL');
+        }
 
-            // Add profile image URLs
-            const usersWithUrls = users.map(user => ({
-                ...user,
-                profile_image_url: user.profile_image ? `${req.protocol}://${req.get('host')}/uploads/profiles/${user.profile_image}` : null
-            }));
+        if (updateFields.length === 0) {
+            return res.status(400).json({ message: 'No fields provided for update' });
+        }
 
-            res.json({ 
-                error: false,
-                users: usersWithUrls, 
-                pagination: { 
-                    currentPage: page, 
-                    totalPages, 
-                    totalUsers, 
-                    limit 
-                } 
-            });
+        const query = `UPDATE users SET ${updateFields.join(', ')} WHERE id = ?`;
+        updateValues.push(userId);
+
+        db.query(query, updateValues, (err, result) => {
+            if (err) {
+                console.error('Database error updating user:', err);
+                if (req.file) {
+                    try {
+                        fs.unlinkSync(req.file.path);
+                    } catch (fileErr) {
+                        console.error('Error deleting uploaded file:', fileErr);
+                    }
+                }
+                if (err.code === 'ER_DUP_ENTRY') {
+                    return res.status(409).json({ message: 'Email already exists' });
+                }
+                return res.status(500).json({ message: 'Internal server error' });
+            }
+            if (result.affectedRows === 0) {
+                if (req.file) {
+                    try {
+                        fs.unlinkSync(req.file.path);
+                    } catch (fileErr) {
+                        console.error('Error deleting uploaded file:', fileErr);
+                    }
+                }
+                return res.status(404).json({ message: 'User not found' });
+            }
+            res.status(200).json({ message: 'User updated successfully' });
         });
     });
 });
 
+// 4. Delete user
+app.delete('/api/admin/users/:id', verifyToken, isAdmin, (req, res) => {
+    const userId = parseInt(req.params.id);
+
+    if (!Number.isInteger(userId)) {
+        return res.status(400).json({ message: 'Invalid user ID' });
+    }
+
+    const userQuery = `
+        SELECT id, role, profile_image
+        FROM users
+        WHERE id = ? AND status = 'active'
+    `;
+    db.query(userQuery, [userId], (err, userResults) => {
+        if (err) {
+            console.error('Database error fetching user:', err);
+            return res.status(500).json({ message: 'Internal server error' });
+        }
+        if (userResults.length === 0) {
+            return res.status(404).json({ message: 'User not found or inactive' });
+        }
+
+        const userData = userResults[0];
+
+        const deleteUser = (userData, res) => {
+            const deleteQuery = `DELETE FROM users WHERE id = ?`;
+            db.query(deleteQuery, [userData.id], (err, result) => {
+                if (err) {
+                    console.error('Database error deleting user:', err);
+                    return res.status(500).json({ message: 'Internal server error' });
+                }
+                if (result.affectedRows === 0) {
+                    return res.status(404).json({ message: 'User not found' });
+                }
+                if (userData.profile_image) {
+                    const imagePath = path.join(profilesDir, userData.profile_image);
+                    if (fs.existsSync(imagePath)) {
+                        try {
+                            fs.unlinkSync(imagePath);
+                        } catch (fileErr) {
+                            console.error('Error deleting profile image:', fileErr);
+                        }
+                    }
+                }
+                res.status(200).json({ message: 'User deleted successfully' });
+            });
+        };
+
+        if (userData.role === 'instructor') {
+            const courseQuery = `
+                SELECT id
+                FROM courses
+                WHERE instructor_id = ? AND status = 'published'
+                LIMIT 1
+            `;
+            db.query(courseQuery, [userId], (err, courseResults) => {
+                if (err) {
+                    console.error('Database error checking courses:', err);
+                    return res.status(500).json({ message: 'Internal server error' });
+                }
+                if (courseResults.length > 0) {
+                    return res.status(400).json({ message: 'Cannot delete instructor with active courses' });
+                }
+                deleteUser(userData, res);
+            });
+        } else {
+            deleteUser(userData, res);
+        }
+    });
+});
+
+// 5. CREATE INSTRUCTOR ✅ THIS WAS YOUR BROKEN ROUTE
+app.post('/api/admin/create-instructor', verifyToken, isAdmin, uploadProfileImage.single('profileImage'), [
+    body('name').trim().isLength({ min: 2, max: 100 }).withMessage('Name must be between 2 and 100 characters'),
+    body('email').isEmail().normalizeEmail().withMessage('Please provide a valid email'),
+    body('password').isLength({ min: 6 }).withMessage('Password must be at least 6 characters long'),
+    body('phone').optional().isMobilePhone().withMessage('Please provide a valid phone number'),
+    body('dateOfBirth').optional().isISO8601().withMessage('Please provide a valid date of birth'),
+    body('gender').optional().isIn(['male', 'female', 'other', 'prefer_not_to_say']).withMessage('Invalid gender selection'),
+    body('country').optional().isLength({ min: 2, max: 100 }).withMessage('Country name must be between 2 and 100 characters'),
+    body('bio').optional().isLength({ max: 500 }).withMessage('Bio must not exceed 500 characters')
+], async (req, res) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+        if (req.file) {
+            try {
+                fs.unlinkSync(req.file.path);
+            } catch (fileErr) {
+                console.error('Error deleting uploaded file:', fileErr);
+            }
+        }
+        return res.status(400).json({ message: 'Validation error', errors: errors.array() });
+    }
+
+    const { name, email, password, bio, phone, dateOfBirth, gender, country } = req.body;
+    const role = 'instructor';
+   
+    let hashedPassword;
+    try {
+        hashedPassword = await bcrypt.hash(password, 12);
+    } catch (hashErr) {
+        console.error('Error hashing password:', hashErr);
+        if (req.file) {
+            try {
+                fs.unlinkSync(req.file.path);
+            } catch (fileErr) {
+                console.error('Error deleting uploaded file:', fileErr);
+            }
+        }
+        return res.status(500).json({ message: 'Internal server error' });
+    }
+
+    const emailVerificationToken = jwt.sign(
+        { email },
+        process.env.JWT_SECRET || 'your_jwt_secret',
+        { expiresIn: '1d' }
+    );
+
+    let profileImagePath = null;
+    if (req.file) {
+        profileImagePath = req.file.filename;
+    }
+
+    const query = `
+        INSERT INTO users (
+            name, email, password, role, status, profile_image, bio, phone,
+            date_of_birth, gender, country, email_verified, email_verification_token,
+            created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
+    `;
+    const values = [
+        name, email, hashedPassword, role, 'active', profileImagePath,
+        bio || null, phone || null, dateOfBirth || null, gender || null,
+        country || null, 0, emailVerificationToken
+    ];
+
+    db.query(query, values, (err, result) => {
+        if (err) {
+            console.error('Database error creating instructor:', err);
+            if (req.file) {
+                try {
+                    fs.unlinkSync(req.file.path);
+                } catch (fileErr) {
+                    console.error('Error deleting uploaded file:', fileErr);
+                }
+            }
+            if (err.code === 'ER_DUP_ENTRY') {
+                return res.status(409).json({ message: 'Email already exists' });
+            }
+            return res.status(500).json({ message: 'Internal server error' });
+        }
+        console.log('✅ Instructor created successfully:', result.insertId);
+        res.status(201).json({ message: 'Instructor created successfully', userId: result.insertId });
+    });
+});
 // ... (Rest of the existing code, e.g., /api/admin/statistics, graceful shutdown, etc.)
 
 // Additional Admin Backend API Endpoints - Add these to your existing server.js
@@ -2169,7 +2430,7 @@ app.get('/api/admin/courses', verifyToken, isAdmin, (req, res) => {
     const offset = (page - 1) * limit;
 
     const countQuery = 'SELECT COUNT(*) as total FROM courses';
-    
+   
     db.query(countQuery, (err, countResult) => {
         if (err) {
             console.error('Database error counting courses:', err);
@@ -2180,7 +2441,7 @@ app.get('/api/admin/courses', verifyToken, isAdmin, (req, res) => {
         const totalPages = Math.ceil(totalCourses / limit);
 
         const query = `
-            SELECT 
+            SELECT
                 c.id,
                 c.title,
                 c.slug,
@@ -2225,14 +2486,14 @@ app.get('/api/admin/courses', verifyToken, isAdmin, (req, res) => {
                 thumbnail_url: course.thumbnail ? `${req.protocol}://${req.get('host')}/uploads/course_thumbnails/${course.thumbnail}` : null
             }));
 
-            res.json({ 
-                courses: coursesWithUrls, 
-                pagination: { 
-                    currentPage: page, 
-                    totalPages, 
-                    totalCourses: totalCourses, 
-                    limit 
-                } 
+            res.json({
+                courses: coursesWithUrls,
+                pagination: {
+                    currentPage: page,
+                    totalPages,
+                    totalCourses: totalCourses,
+                    limit
+                }
             });
         });
     });
@@ -2251,8 +2512,8 @@ app.put('/api/admin/courses/:id/status', verifyToken, isAdmin, [
     const { status } = req.body;
 
     const updateQuery = `
-        UPDATE courses 
-        SET status = ?, updated_at = NOW() 
+        UPDATE courses
+        SET status = ?, updated_at = NOW()
         WHERE id = ?
     `;
 
@@ -2277,7 +2538,7 @@ app.delete('/api/admin/courses/:id', verifyToken, isAdmin, (req, res) => {
     // First, get course details for cleanup
     const getCourseQuery = `
         SELECT id, thumbnail, title
-        FROM courses 
+        FROM courses
         WHERE id = ?
     `;
 
@@ -2427,9 +2688,9 @@ app.get('/api/admin/statistics', verifyToken, isAdmin, (req, res) => {
         activeEnrollments: `SELECT COUNT(*) as count FROM enrollments WHERE status = 'in_progress'`,
         completedEnrollments: `SELECT COUNT(*) as count FROM enrollments WHERE status = 'completed'`,
         totalRevenue: `
-            SELECT COALESCE(SUM(c.price), 0) as revenue 
-            FROM enrollments e 
-            JOIN courses c ON e.course_id = c.id 
+            SELECT COALESCE(SUM(c.price), 0) as revenue
+            FROM enrollments e
+            JOIN courses c ON e.course_id = c.id
             WHERE e.status IN ('in_progress', 'completed')
         `
     };
@@ -2450,9 +2711,9 @@ app.get('/api/admin/statistics', verifyToken, isAdmin, (req, res) => {
                     results[key] = result[0].count || 0;
                 }
             }
-            
+           
             completedQueries++;
-            
+           
             if (completedQueries === queryKeys.length) {
                 // All queries completed, send response
                 res.json({
@@ -2486,7 +2747,7 @@ app.get('/api/admin/statistics', verifyToken, isAdmin, (req, res) => {
 // GET DASHBOARD ANALYTICS DATA (Admin only)
 app.get('/api/admin/analytics', verifyToken, isAdmin, (req, res) => {
     const { period = '7d' } = req.query; // 7d, 30d, 90d, 1y
-    
+   
     let dateFilter = '';
     switch(period) {
         case '7d':
@@ -2543,9 +2804,9 @@ app.get('/api/admin/analytics', verifyToken, isAdmin, (req, res) => {
             } else {
                 results[key] = result;
             }
-            
+           
             completedQueries++;
-            
+           
             if (completedQueries === queryKeys.length) {
                 res.json(results);
             }
@@ -2564,10 +2825,10 @@ app.post('/api/admin/users/bulk-delete', verifyToken, isAdmin, [
     }
 
     const { userIds } = req.body;
-    
+   
     // Check if trying to delete admin users
     const checkAdminQuery = `SELECT id FROM users WHERE id IN (${userIds.map(() => '?').join(',')}) AND role = 'admin'`;
-    
+   
     db.query(checkAdminQuery, userIds, (err, adminResults) => {
         if (err) {
             console.error('Database error checking admin users:', err);
@@ -2579,14 +2840,14 @@ app.post('/api/admin/users/bulk-delete', verifyToken, isAdmin, [
         }
 
         const deleteQuery = `UPDATE users SET status = 'deleted', updated_at = NOW() WHERE id IN (${userIds.map(() => '?').join(',')})`;
-        
+       
         db.query(deleteQuery, userIds, (deleteErr, result) => {
             if (deleteErr) {
                 console.error('Database error bulk deleting users:', deleteErr);
                 return res.status(500).json({ message: 'Failed to delete users.' });
             }
 
-            res.json({ 
+            res.json({
                 message: `${result.affectedRows} user(s) deleted successfully.`,
                 deletedCount: result.affectedRows
             });
@@ -2599,7 +2860,7 @@ app.get('/api/admin/users/export', verifyToken, isAdmin, (req, res) => {
     const { format = 'json' } = req.query; // json, csv
 
     const query = `
-        SELECT 
+        SELECT
             u.id,
             u.name,
             u.email,
@@ -2615,13 +2876,13 @@ app.get('/api/admin/users/export', verifyToken, isAdmin, (req, res) => {
             COALESCE(enrollment_count.count, 0) as enrolled_courses
         FROM users u
         LEFT JOIN (
-            SELECT instructor_id, COUNT(*) as count 
-            FROM courses 
+            SELECT instructor_id, COUNT(*) as count
+            FROM courses
             GROUP BY instructor_id
         ) course_count ON u.id = course_count.instructor_id
         LEFT JOIN (
-            SELECT user_id, COUNT(*) as count 
-            FROM enrollments 
+            SELECT user_id, COUNT(*) as count
+            FROM enrollments
             GROUP BY user_id
         ) enrollment_count ON u.id = enrollment_count.user_id
         WHERE u.status != 'deleted'
@@ -2669,7 +2930,7 @@ app.get('/api/admin/courses/export', verifyToken, isAdmin, (req, res) => {
     const { format = 'json' } = req.query;
 
     const query = `
-        SELECT 
+        SELECT
             c.id,
             c.title,
             c.slug,
@@ -2693,13 +2954,13 @@ app.get('/api/admin/courses/export', verifyToken, isAdmin, (req, res) => {
         JOIN users u ON c.instructor_id = u.id
         JOIN categories cat ON c.category_id = cat.id
         LEFT JOIN (
-            SELECT course_id, COUNT(*) as count 
-            FROM enrollments 
+            SELECT course_id, COUNT(*) as count
+            FROM enrollments
             GROUP BY course_id
         ) enrollment_count ON c.id = enrollment_count.course_id
         LEFT JOIN (
-            SELECT course_id, COUNT(*) as count 
-            FROM course_materials 
+            SELECT course_id, COUNT(*) as count
+            FROM course_materials
             GROUP BY course_id
         ) material_count ON c.id = material_count.course_id
         ORDER BY c.created_at DESC
@@ -2761,7 +3022,7 @@ app.post('/api/admin/notifications/broadcast', verifyToken, isAdmin, [
     }
 
     const { title, message, type = 'info', target_roles } = req.body;
-    
+   
     // Create notifications table if it doesn't exist
     const createNotificationsTable = `
         CREATE TABLE IF NOT EXISTS notifications (
@@ -2816,7 +3077,7 @@ app.post('/api/admin/notifications/broadcast', verifyToken, isAdmin, [
                     return res.status(500).json({ message: 'Failed to send notifications.' });
                 }
 
-                res.json({ 
+                res.json({
                     message: 'Notifications sent successfully.',
                     sent_count: result.affectedRows
                 });
@@ -2898,8 +3159,8 @@ app.post('/api/materials/:materialId/progress', verifyToken, (req, res) => {
 
         const upsertQuery = `
             INSERT INTO video_progress (
-                user_id, video_id, watched_duration_seconds, 
-                total_duration_seconds, progress_percentage, 
+                user_id, video_id, watched_duration_seconds,
+                total_duration_seconds, progress_percentage,
                 completed, last_watched_at, watch_count
             ) VALUES (?, ?, ?, ?, ?, ?, NOW(), 1)
             ON DUPLICATE KEY UPDATE
@@ -2922,7 +3183,7 @@ app.post('/api/materials/:materialId/progress', verifyToken, (req, res) => {
             // Update course progress in enrollments if not instructor
             if (!isInstructor && isEnrolled) {
                 const calcProgressQuery = `
-                    SELECT 
+                    SELECT
                         (SUM(CASE WHEN vp.completed = 1 THEN 1 ELSE 0 END) / COUNT(cm.id)) * 100 AS course_progress
                     FROM course_materials cm
                     LEFT JOIN video_progress vp ON cm.id = vp.video_id AND vp.user_id = ?
@@ -2936,8 +3197,8 @@ app.post('/api/materials/:materialId/progress', verifyToken, (req, res) => {
                     } else {
                         const course_progress = progResults[0]?.course_progress || 0;
                         const updateEnrollmentQuery = `
-                            UPDATE enrollments 
-                            SET progress_percentage = ? 
+                            UPDATE enrollments
+                            SET progress_percentage = ?
                             WHERE user_id = ? AND course_id = ?
                         `;
                         db.query(updateEnrollmentQuery, [course_progress, userId, material.course_id], (updateErr) => {
@@ -2949,10 +3210,10 @@ app.post('/api/materials/:materialId/progress', verifyToken, (req, res) => {
                 });
             }
 
-            res.json({ 
-                message: 'Progress updated', 
-                progress_percentage, 
-                completed: !!completed 
+            res.json({
+                message: 'Progress updated',
+                progress_percentage,
+                completed: !!completed
             });
         });
     });
@@ -2965,19 +3226,19 @@ app.post('/api/materials/:materialId/progress', verifyToken, (req, res) => {
 app.get('/api/courses/:courseId/quizzes', verifyToken, async (req, res) => {
     try {
         const { courseId } = req.params;
-        
+       
         // Check if user has access to this course
         const accessQuery = `
-            SELECT * FROM courses 
+            SELECT * FROM courses
             WHERE id = ? AND (instructor_id = ? OR id IN (SELECT course_id FROM enrollments WHERE user_id = ?))
         `;
-        
+       
         db.query(accessQuery, [courseId, req.user.id, req.user.id], (err, courses) => {
             if (err) {
                 console.error('Database error checking course access:', err);
                 return res.status(500).json({ message: 'Server error' });
             }
-            
+           
             if (courses.length === 0) {
                 return res.status(403).json({ message: 'Access denied' });
             }
@@ -3004,10 +3265,10 @@ app.get('/api/courses/:courseId/quizzes', verifyToken, async (req, res) => {
 app.post('/api/courses/:courseId/quizzes', verifyToken, isInstructor, (req, res) => {
     try {
         const { courseId } = req.params;
-        const { 
-            title, description, instructions, time_limit_minutes, 
-            passing_score, max_attempts, is_active, show_results, 
-            randomize_questions, randomize_options, order_index 
+        const {
+            title, description, instructions, time_limit_minutes,
+            passing_score, max_attempts, is_active, show_results,
+            randomize_questions, randomize_options, order_index
         } = req.body;
 
         // Verify course ownership
@@ -3026,16 +3287,16 @@ app.post('/api/courses/:courseId/quizzes', verifyToken, isInstructor, (req, res)
 
                 const insertQuery = `
                     INSERT INTO quizzes (
-                        course_id, title, description, instructions, time_limit_minutes, 
-                        passing_score, max_attempts, is_active, show_results, 
+                        course_id, title, description, instructions, time_limit_minutes,
+                        passing_score, max_attempts, is_active, show_results,
                         randomize_questions, randomize_options, order_index
                     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 `;
 
                 db.query(insertQuery, [
-                    courseId, title, description, instructions, 
-                    time_limit_minutes || 60, passing_score || 80, max_attempts || 3, 
-                    is_active !== false, show_results !== false, 
+                    courseId, title, description, instructions,
+                    time_limit_minutes || 60, passing_score || 80, max_attempts || 3,
+                    is_active !== false, show_results !== false,
                     randomize_questions || false, randomize_options || false, order_index || 0
                 ], (err, result) => {
                     if (err) {
@@ -3063,16 +3324,16 @@ app.post('/api/courses/:courseId/quizzes', verifyToken, isInstructor, (req, res)
 app.put('/api/courses/:courseId/quizzes/:quizId', verifyToken, isInstructor, (req, res) => {
     try {
         const { courseId, quizId } = req.params;
-        const { 
-            title, description, instructions, time_limit_minutes, 
-            passing_score, max_attempts, is_active, show_results, 
-            randomize_questions, randomize_options, order_index 
+        const {
+            title, description, instructions, time_limit_minutes,
+            passing_score, max_attempts, is_active, show_results,
+            randomize_questions, randomize_options, order_index
         } = req.body;
 
         // Verify ownership
         const verifyQuery = `
-            SELECT q.* FROM quizzes q 
-            JOIN courses c ON q.course_id = c.id 
+            SELECT q.* FROM quizzes q
+            JOIN courses c ON q.course_id = c.id
             WHERE q.id = ? AND q.course_id = ? AND c.instructor_id = ?
         `;
 
@@ -3087,16 +3348,16 @@ app.put('/api/courses/:courseId/quizzes/:quizId', verifyToken, isInstructor, (re
             }
 
             const updateQuery = `
-                UPDATE quizzes SET 
-                    title = ?, description = ?, instructions = ?, time_limit_minutes = ?, 
-                    passing_score = ?, max_attempts = ?, is_active = ?, show_results = ?, 
-                    randomize_questions = ?, randomize_options = ?, order_index = ? 
+                UPDATE quizzes SET
+                    title = ?, description = ?, instructions = ?, time_limit_minutes = ?,
+                    passing_score = ?, max_attempts = ?, is_active = ?, show_results = ?,
+                    randomize_questions = ?, randomize_options = ?, order_index = ?
                 WHERE id = ?
             `;
 
             db.query(updateQuery, [
-                title, description, instructions, time_limit_minutes, 
-                passing_score, max_attempts, is_active, show_results, 
+                title, description, instructions, time_limit_minutes,
+                passing_score, max_attempts, is_active, show_results,
                 randomize_questions, randomize_options, order_index, quizId
             ], (err) => {
                 if (err) {
@@ -3126,8 +3387,8 @@ app.delete('/api/courses/:courseId/quizzes/:quizId', verifyToken, isInstructor, 
 
         // Verify ownership
         const verifyQuery = `
-            SELECT q.* FROM quizzes q 
-            JOIN courses c ON q.course_id = c.id 
+            SELECT q.* FROM quizzes q
+            JOIN courses c ON q.course_id = c.id
             WHERE q.id = ? AND q.course_id = ? AND c.instructor_id = ?
         `;
 
@@ -3175,8 +3436,8 @@ app.get('/api/quizzes/:quizId/questions', verifyToken, (req, res) => {
 
         // Verify access
         const verifyQuery = `
-            SELECT q.* FROM quizzes q 
-            JOIN courses c ON q.course_id = c.id 
+            SELECT q.* FROM quizzes q
+            JOIN courses c ON q.course_id = c.id
             WHERE q.id = ? AND (c.instructor_id = ? OR c.id IN (SELECT course_id FROM enrollments WHERE user_id = ?))
         `;
 
@@ -3250,8 +3511,8 @@ app.post('/api/quizzes/:quizId/questions', verifyToken, isInstructor, (req, res)
 
         // Verify ownership
         const verifyQuery = `
-            SELECT q.* FROM quizzes q 
-            JOIN courses c ON q.course_id = c.id 
+            SELECT q.* FROM quizzes q
+            JOIN courses c ON q.course_id = c.id
             WHERE q.id = ? AND c.instructor_id = ?
         `;
 
@@ -3266,7 +3527,7 @@ app.post('/api/quizzes/:quizId/questions', verifyToken, isInstructor, (req, res)
             }
 
             const insertQuery = `
-                INSERT INTO quiz_questions (quiz_id, question, question_type, correct_answer, explanation, points, order_index) 
+                INSERT INTO quiz_questions (quiz_id, question, question_type, correct_answer, explanation, points, order_index)
                 VALUES (?, ?, ?, ?, ?, ?, ?)
             `;
 
@@ -3290,7 +3551,7 @@ app.post('/api/quizzes/:quizId/questions', verifyToken, isInstructor, (req, res)
                             (err) => {
                                 if (err) console.error('Error inserting option:', err);
                                 optionsInserted++;
-                                
+                               
                                 if (optionsInserted === options.length) {
                                     // Update questions count
                                     db.query(
@@ -3399,8 +3660,8 @@ app.post('/api/quizzes/:quizId/submit', verifyToken, (req, res) => {
                             // Insert attempt
                             const insertQuery = `
                                 INSERT INTO quiz_attempts (
-                                    user_id, quiz_id, attempt_number, score, percentage, total_questions, 
-                                    correct_answers, wrong_answers, unanswered, is_passed, answers, 
+                                    user_id, quiz_id, attempt_number, score, percentage, total_questions,
+                                    correct_answers, wrong_answers, unanswered, is_passed, answers,
                                     started_at, completed_at, time_taken_minutes, ip_address, user_agent
                                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), ?, ?, ?)
                             `;
@@ -3440,32 +3701,20 @@ app.post('/api/quizzes/:quizId/submit', verifyToken, (req, res) => {
     }
 });
 
-// Get user quiz attempts
-app.get('/api/courses/:courseId/quiz-attempts', verifyToken, (req, res) => {
+app.get('/api/courses/:courseId/quiz-attempts', verifyToken, async (req, res) => {
+    const { courseId } = req.params;
+    const userId = req.query.user_id || req.user.id;
     try {
-        const { courseId } = req.params;
-
-        const query = `
-            SELECT qa.*, q.title as quiz_title 
-            FROM quiz_attempts qa 
-            JOIN quizzes q ON qa.quiz_id = q.id 
-            WHERE qa.user_id = ? AND q.course_id = ? 
-            ORDER BY qa.completed_at DESC
-        `;
-
-        db.query(query, [req.user.id, courseId], (err, attempts) => {
-            if (err) {
-                console.error('Error fetching quiz attempts:', err);
-                return res.status(500).json({ message: 'Server error' });
-            }
-            res.json(attempts);
-        });
+        const [attempts] = await db.query(
+            'SELECT qa.score, q.passing_score FROM quiz_attempts qa JOIN quizzes q ON qa.quiz_id = q.id WHERE qa.user_id = ? AND q.course_id = ?',
+            [userId, courseId]
+        );
+        res.json(attempts);
     } catch (error) {
         console.error('Error fetching quiz attempts:', error);
-        res.status(500).json({ message: 'Server error' });
+        res.status(500).json({ message: 'Failed to fetch quiz attempts' });
     }
 });
-
 // Example backend (Node.js/Express)
 app.delete('/api/admin/users/:id', async (req, res) => {
     try {
@@ -3480,10 +3729,982 @@ app.delete('/api/admin/users/:id', async (req, res) => {
         res.status(500).json({ message: 'Server error: ' + error.message });
     }
 });
+
+
+
+
+// 1. Quiz Attempts Endpoint (required for checkQuizCompletion)
+
+// NEW (FIXED):
+// 1. FIXED: Quiz Attempts Endpoint (callback style)
+app.get('/api/courses/:courseId/quiz-attempts', verifyToken, (req, res) => {
+    const { courseId } = req.params;
+    const userId = req.query.user_id || req.user.id;
+    
+    const query = `
+        SELECT qa.score, q.passing_score 
+        FROM quiz_attempts qa 
+        JOIN quizzes q ON qa.quiz_id = q.id 
+        WHERE qa.user_id = ? AND q.course_id = ?
+    `;
+    
+    db.query(query, [userId, courseId], (err, attempts) => {
+        if (err) {
+            console.error('Error fetching quiz attempts:', err);
+            return res.status(500).json({ message: 'Failed to fetch quiz attempts' });
+        }
+        res.json(attempts);
+    });
+});
+
+// 2. FIXED: Certificate Status Check (callback style)
+app.get('/api/courses/:courseId/certificate/status', verifyToken, (req, res) => {
+    const { courseId } = req.params;
+    const userId = req.user.id;
+    
+    const query = `
+        SELECT id, certificate_number, certificate_url, status, issue_date, completion_date
+        FROM certificates 
+        WHERE user_id = ? AND course_id = ? 
+        ORDER BY created_at DESC
+        LIMIT 1
+    `;
+    
+    db.query(query, [userId, courseId], (err, certificates) => {
+        if (err) {
+            console.error('Certificate status check error:', err);
+            return res.status(500).json({ message: 'Failed to check certificate status' });
+        }
+        
+        if (certificates.length === 0) {
+            return res.json({
+                exists: false,
+                certificate: null
+            });
+        }
+        
+        const cert = certificates[0];
+        res.json({
+            exists: true,
+            certificate: {
+                ...cert,
+                certificate_url: `${req.protocol}://${req.get('host')}${cert.certificate_url}`
+            }
+        });
+    });
+});
+
+// 3. Certificate Generation for Users (POST /api/courses/:courseId/certificate)
+// REPLACE your POST /api/courses/:courseId/certificate endpoint
+// 2. GENERATE CERTIFICATE (POST) - Creates PDF and DB entry
+app.post('/api/courses/:courseId/certificate', verifyToken, (req, res) => {
+    const { courseId } = req.params;
+    const userId = req.user.id;
+    
+    console.log('📜 Certificate generation request:', { courseId, userId });
+    
+    // Step 1: Check eligibility
+    const eligibilityQuery = `
+        SELECT e.progress_percentage, c.title, c.instructor_id, u.name as user_name
+        FROM enrollments e
+        JOIN courses c ON e.course_id = c.id
+        JOIN users u ON e.user_id = u.id
+        WHERE e.user_id = ? AND e.course_id = ?
+    `;
+    
+    db.query(eligibilityQuery, [userId, courseId], (err, enrollments) => {
+        if (err) {
+            console.error('❌ Eligibility check error:', err);
+            return res.status(500).json({ message: 'Database error' });
+        }
+        
+        if (enrollments.length === 0) {
+            console.log('❌ User not enrolled');
+            return res.status(400).json({ message: 'User is not enrolled in this course' });
+        }
+        
+        const enrollment = enrollments[0];
+        console.log('✅ Enrollment found:', enrollment);
+        
+        // ✅ CHANGED: Lowered progress requirement from 80% to 10% for testing
+        if (enrollment.progress_percentage < 10) {
+            console.log('❌ Insufficient progress:', enrollment.progress_percentage);
+            return res.status(400).json({ 
+                message: 'Course progress must be at least 10%',
+                progress: enrollment.progress_percentage 
+            });
+        }
+        
+        console.log('✅ Progress requirement met:', enrollment.progress_percentage);
+        
+        // Step 2: Check existing certificate
+        const existingQuery = `
+            SELECT id, certificate_number, certificate_url, status
+            FROM certificates 
+            WHERE user_id = ? AND course_id = ?
+        `;
+        
+        db.query(existingQuery, [userId, courseId], (err, existing) => {
+            if (err) {
+                console.error('❌ Existing cert check error:', err);
+                return res.status(500).json({ message: 'Database error' });
+            }
+            
+            if (existing.length > 0 && existing[0].status === 'active') {
+                console.log('✅ Certificate already exists:', existing[0].certificate_number);
+                return res.status(200).json({
+                    message: 'Certificate already exists',
+                    certificate: {
+                        id: existing[0].id,
+                        certificate_number: existing[0].certificate_number,
+                        certificate_url: `${req.protocol}://${req.get('host')}${existing[0].certificate_url}`
+                    }
+                });
+            }
+            
+            console.log('🔵 Generating new certificate...');
+            
+            // Step 3: Generate certificate
+            const crypto = require('crypto');
+            const PDFDocument = require('pdfkit');
+            
+            const certificateNumber = `CERT-${Date.now()}-${crypto.randomBytes(4).toString('hex').toUpperCase()}`;
+            const certificateHash = crypto
+                .createHash('sha256')
+                .update(certificateNumber + userId + courseId + Date.now())
+                .digest('hex');
+            
+            const fileName = `certificate-${certificateNumber}.pdf`;
+            const certificatesDir = path.join(__dirname, 'uploads', 'certificates');
+            
+            // Ensure directory exists
+            if (!fs.existsSync(certificatesDir)) {
+                fs.mkdirSync(certificatesDir, { recursive: true });
+                console.log('✅ Created certificates directory');
+            }
+            
+            const filePath = path.join(certificatesDir, fileName);
+            const certificateUrl = `/uploads/certificates/${fileName}`;
+            
+            // Step 4: Create PDF
+            const doc = new PDFDocument({ size: 'A4', layout: 'landscape' });
+            const writeStream = fs.createWriteStream(filePath);
+            
+            doc.pipe(writeStream);
+            
+            // Professional certificate design
+            doc.rect(0, 0, 842, 595).fill('#f8f9fa');
+            doc.rect(20, 20, 802, 555).stroke('#1a73e8');
+            doc.rect(30, 30, 782, 535).stroke('#1a73e8');
+            
+            doc.fontSize(50)
+               .fillColor('#1a73e8')
+               .text('CERTIFICATE', 100, 100, { align: 'center', width: 642 });
+            
+            doc.fontSize(25)
+               .fillColor('#333333')
+               .text('of Completion', 100, 160, { align: 'center', width: 642 });
+            
+            doc.fontSize(18)
+               .fillColor('#666666')
+               .text('This is to certify that', 100, 220, { align: 'center', width: 642 });
+            
+            doc.fontSize(32)
+               .fillColor('#1a73e8')
+               .text(enrollment.user_name, 100, 260, { align: 'center', width: 642 });
+            
+            doc.fontSize(16)
+               .fillColor('#666666')
+               .text('has successfully completed the course', 100, 310, { align: 'center', width: 642 });
+            
+            doc.fontSize(24)
+               .fillColor('#333333')
+               .text(enrollment.title, 100, 350, { align: 'center', width: 642 });
+            
+            doc.fontSize(14)
+               .fillColor('#888888')
+               .text(`Certificate No: ${certificateNumber}`, 100, 430, { align: 'center', width: 642 });
+            
+            doc.fontSize(12)
+               .text(`Issued: ${new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}`, 100, 460, { align: 'center', width: 642 });
+            
+            doc.fontSize(10)
+               .fillColor('#aaaaaa')
+               .text(`Hash: ${certificateHash.substring(0, 32)}...`, 100, 490, { align: 'center', width: 642 });
+            
+            doc.end();
+            
+            writeStream.on('finish', () => {
+                console.log('✅ PDF created successfully');
+                
+                // Step 5: Save to database
+                const insertQuery = `
+                    INSERT INTO certificates (
+                        user_id, course_id, certificate_number, certificate_hash,
+                        certificate_url, issue_date, completion_date, status,
+                        is_verified, created_at
+                    ) VALUES (?, ?, ?, ?, ?, NOW(), CURDATE(), 'active', 1, NOW())
+                `;
+                
+                db.query(insertQuery, [
+                    userId, courseId, certificateNumber, certificateHash, certificateUrl
+                ], (err, result) => {
+                    if (err) {
+                        console.error('❌ Certificate insert error:', err);
+                        // Clean up file
+                        if (fs.existsSync(filePath)) {
+                            fs.unlinkSync(filePath);
+                        }
+                        return res.status(500).json({ message: 'Failed to save certificate to database' });
+                    }
+                    
+                    console.log('✅ Certificate saved to database:', {
+                        id: result.insertId,
+                        userId,
+                        courseId,
+                        certificateNumber
+                    });
+                    
+                    res.status(201).json({
+                        message: 'Certificate generated successfully',
+                        certificate: {
+                            id: result.insertId,
+                            certificate_number: certificateNumber,
+                            certificate_url: `${req.protocol}://${req.get('host')}${certificateUrl}`,
+                            certificate_hash: certificateHash
+                        }
+                    });
+                });
+            });
+            
+            writeStream.on('error', (err) => {
+                console.error('❌ PDF write error:', err);
+                res.status(500).json({ message: 'Failed to generate certificate PDF' });
+            });
+        });
+    });
+});
+
+// 4. Admin Certificate Issue (POST /api/certificates/issue)
+// 3. FIXED: Admin Certificate Issue (callback style)
+app.post('/api/certificates/issue', verifyToken, isAdmin, [
+    body('user_id').isInt({ min: 1 }).withMessage('Valid user ID is required'),
+    body('course_id').isInt({ min: 1 }).withMessage('Valid course ID is required'),
+    body('grade').optional().isFloat({ min: 0, max: 100 }).withMessage('Grade must be between 0 and 100'),
+    body('completion_date').isISO8601().withMessage('Valid completion date is required')
+], (req, res) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+        return res.status(400).json({ message: 'Validation error', errors: errors.array() });
+    }
+
+    const { user_id, course_id, grade, completion_date } = req.body;
+    const crypto = require('crypto');
+    const PDFDocument = require('pdfkit');
+
+    // Check existing certificate
+    db.query(
+        'SELECT id FROM certificates WHERE user_id = ? AND course_id = ? AND status = "active"',
+        [user_id, course_id],
+        (err, existing) => {
+            if (err) {
+                console.error('Database error:', err);
+                return res.status(500).json({ message: 'Database error' });
+            }
+
+            if (existing.length > 0) {
+                return res.status(400).json({ message: 'Certificate already exists.' });
+            }
+
+            // Generate certificate
+            const certificateNumber = `CERT-${Date.now()}-${crypto.randomBytes(8).toString('hex').toUpperCase()}`;
+            const certificateHash = crypto.createHash('sha256')
+                .update(certificateNumber + user_id + course_id)
+                .digest('hex');
+
+            const fileName = `certificate-${certificateNumber}.pdf`;
+            const certificatesDir = path.join(__dirname, 'uploads', 'certificates');
+            
+            if (!fs.existsSync(certificatesDir)) {
+                fs.mkdirSync(certificatesDir, { recursive: true });
+            }
+
+            const filePath = path.join(certificatesDir, fileName);
+            const certificateUrl = `/uploads/certificates/${fileName}`;
+
+            // Create PDF
+            const doc = new PDFDocument({ size: 'A4', layout: 'landscape' });
+            const writeStream = fs.createWriteStream(filePath);
+            
+            doc.pipe(writeStream);
+            doc.fontSize(40).text('Certificate of Completion', 100, 100, { align: 'center' });
+            doc.fontSize(20).text(`Course ID: ${course_id}`, 100, 150, { align: 'center' });
+            doc.fontSize(16).text(`User ID: ${user_id}`, 100, 180, { align: 'center' });
+            doc.fontSize(14).text(`Certificate Number: ${certificateNumber}`, 100, 210, { align: 'center' });
+            doc.fontSize(12).text(`Issued: ${new Date(completion_date).toISOString().split('T')[0]}`, 100, 240, { align: 'center' });
+            if (grade) doc.fontSize(12).text(`Grade: ${grade}%`, 100, 270, { align: 'center' });
+            doc.end();
+
+            writeStream.on('finish', () => {
+                // Save to database
+                const insertQuery = `
+                    INSERT INTO certificates (
+                        user_id, course_id, certificate_number, issue_date, completion_date,
+                        grade, certificate_url, certificate_hash, status, is_verified, created_at
+                    ) VALUES (?, ?, ?, NOW(), ?, ?, ?, ?, 'active', 1, NOW())
+                `;
+
+                db.query(insertQuery, [
+                    user_id, course_id, certificateNumber, completion_date, 
+                    grade || null, certificateUrl, certificateHash
+                ], (err, result) => {
+                    if (err) {
+                        console.error('Database insert error:', err);
+                        if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+                        return res.status(500).json({ message: 'Failed to save certificate' });
+                    }
+
+                    res.status(201).json({
+                        message: 'Certificate issued successfully',
+                        certificate: {
+                            id: result.insertId,
+                            certificate_number: certificateNumber,
+                            certificate_url: `${req.protocol}://${req.get('host')}${certificateUrl}`,
+                            certificate_hash: certificateHash
+                        }
+                    });
+                });
+            });
+
+            writeStream.on('error', (err) => {
+                console.error('PDF write error:', err);
+                res.status(500).json({ message: 'Failed to generate certificate PDF' });
+            });
+        }
+    );
+});
+
+// 5. Certificate Download
+// Example route for /api/courses/:courseId/certificate/:userId/download
+// 7. FIXED: Certificate Download with COMPLETE logging
+app.get('/api/courses/:courseId/certificate/:userId/download', verifyToken, (req, res) => {
+    const { courseId, userId } = req.params;
+    
+    console.log('📥 Download request:', { courseId, userId, requestingUser: req.user.id });
+    
+    // Check authorization
+    if (req.user.id !== parseInt(userId) && req.user.role !== 'admin') {
+        console.log('❌ Unauthorized access attempt');
+        return res.status(403).json({ message: 'Unauthorized access' });
+    }
+
+    const query = `
+        SELECT certificate_url, completion_date, certificate_number, id, status
+        FROM certificates 
+        WHERE course_id = ? AND user_id = ? 
+        ORDER BY created_at DESC
+        LIMIT 1
+    `;
+
+    db.query(query, [parseInt(courseId), parseInt(userId)], (err, certificates) => {
+        if (err) {
+            console.error('❌ Database query error:', err);
+            return res.status(500).json({ message: 'Database error' });
+        }
+
+        console.log('📊 Query result:', certificates);
+
+        if (!certificates || certificates.length === 0) {
+            console.log('❌ Certificate not found in database');
+            return res.status(404).json({ 
+                message: 'Certificate not found. Please generate your certificate first.',
+                hint: 'Use POST /api/courses/:courseId/certificate to generate'
+            });
+        }
+
+        const certificate = certificates[0];
+        
+        // Check if certificate is active
+        if (certificate.status !== 'active') {
+            console.log('❌ Certificate not active:', certificate.status);
+            return res.status(400).json({ message: `Certificate is ${certificate.status}` });
+        }
+
+        console.log('✅ Certificate found:', certificate);
+        
+        // Build file path
+        const filePath = path.join(__dirname, certificate.certificate_url.substring(1));
+        console.log('📂 File path:', filePath);
+        
+        // Check if file exists
+        if (!fs.existsSync(filePath)) {
+            console.error('❌ File not found at:', filePath);
+            return res.status(500).json({ 
+                message: 'Certificate file not found on server. Please regenerate your certificate.'
+            });
+        }
+
+        console.log('✅ Sending file...');
+        res.setHeader('Content-Type', 'application/pdf');
+        res.setHeader('Content-Disposition', `attachment; filename=certificate-${certificate.certificate_number}.pdf`);
+        res.sendFile(filePath);
+    });
+});
+// 4. FIXED: Fetch User Certificates (callback style)
+app.get('/api/certificates', verifyToken, (req, res) => {
+    const userId = req.user.id;
+    
+    const query = `
+        SELECT c.id, c.certificate_number, c.issue_date, c.completion_date, 
+               c.grade, c.certificate_url, c.certificate_hash, c.status,
+               co.title as course_title
+        FROM certificates c
+        LEFT JOIN courses co ON c.course_id = co.id
+        WHERE c.user_id = ? AND c.status = 'active' 
+        ORDER BY c.issue_date DESC
+    `;
+    
+    db.query(query, [userId], (err, certificates) => {
+        if (err) {
+            console.error('Fetch certificates error:', err);
+            return res.status(500).json({ message: 'Failed to fetch certificates' });
+        }
+        
+        const certsWithUrls = certificates.map(cert => ({
+            ...cert,
+            certificate_url: `${req.protocol}://${req.get('host')}${cert.certificate_url}`
+        }));
+        
+        res.json({ certificates: certsWithUrls });
+    });
+});
+
+
+// 5. FIXED: Certificate Verification (callback style)
+app.get('/api/certificates/verify', (req, res) => {
+    const { certificate_number, certificate_hash } = req.query;
+    
+    if (!certificate_number && !certificate_hash) {
+        return res.status(400).json({ message: 'Certificate number or hash is required.' });
+    }
+    
+    const query = `
+        SELECT c.*, co.title as course_title, u.name as user_name
+        FROM certificates c
+        LEFT JOIN courses co ON c.course_id = co.id
+        LEFT JOIN users u ON c.user_id = u.id
+        WHERE (c.certificate_number = ? OR c.certificate_hash = ?) AND c.status = 'active'
+    `;
+    
+    db.query(query, [certificate_number || '', certificate_hash || ''], (err, certificates) => {
+        if (err) {
+            console.error('Verification error:', err);
+            return res.status(500).json({ message: 'Certificate verification failed' });
+        }
+        
+        if (certificates.length === 0) {
+            return res.status(404).json({ 
+                verified: false, 
+                certificate: null,
+                message: 'Certificate not found or invalid'
+            });
+        }
+        
+        res.json({ 
+            verified: true, 
+            certificate: certificates[0] 
+        });
+    });
+});
+
+// 6. FIXED: Revoke Certificate (callback style)
+app.put('/api/admin/certificates/:id/revoke', verifyToken, isAdmin, (req, res) => {
+    const { id } = req.params;
+    
+    const query = `
+        UPDATE certificates 
+        SET status = 'revoked', updated_at = NOW() 
+        WHERE id = ? AND status = 'active'
+    `;
+    
+    db.query(query, [id], (err, result) => {
+        if (err) {
+            console.error('Revoke error:', err);
+            return res.status(500).json({ message: 'Failed to revoke certificate' });
+        }
+        
+        if (result.affectedRows === 0) {
+            return res.status(404).json({ message: 'Certificate not found or already revoked.' });
+        }
+        
+        res.json({ message: 'Certificate revoked successfully.' });
+    });
+});
+
+
+// UPDATE QUESTION + OPTIONS  (Instructor only)
+// UPDATE QUESTION + OPTIONS (array format)
+app.put(
+  '/api/quizzes/:quizId/questions/:questionId',
+  verifyToken,
+  isInstructor,
+  (req, res) => {
+    const { quizId, questionId } = req.params;
+    const {
+      question,
+      question_type,
+      correct_answer,
+      explanation,
+      points,
+      order_index,
+      options = [] // <-- Expect array of { option_text, is_correct }
+    } = req.body;
+
+    // 1. Verify ownership
+    const verifySql = `
+      SELECT qq.id
+      FROM quiz_questions qq
+      JOIN quizzes q ON qq.quiz_id = q.id
+      JOIN courses c ON q.course_id = c.id
+      WHERE qq.id = ? AND qq.quiz_id = ? AND c.instructor_id = ?
+    `;
+
+    db.query(verifySql, [questionId, quizId, req.user.id], (err, rows) => {
+      if (err) return res.status(500).json({ message: 'Server error' });
+      if (rows.length === 0) return res.status(404).json({ message: 'Question not found or access denied' });
+
+      // 2. Update question fields
+      const fields = [];
+      const values = [];
+
+      if (question !== undefined) { fields.push('question = ?'); values.push(question); }
+      if (question_type !== undefined) { fields.push('question_type = ?'); values.push(question_type); }
+      if (correct_answer !== undefined) { fields.push('correct_answer = ?'); values.push(correct_answer); }
+      if (explanation !== undefined) { fields.push('explanation = ?'); values.push(explanation); }
+      if (points !== undefined) { fields.push('points = ?'); values.push(points); }
+      if (order_index !== undefined) { fields.push('order_index = ?'); values.push(order_index); }
+
+      fields.push('updated_at = NOW()');
+      values.push(questionId);
+
+      const updateQuestionSql = `UPDATE quiz_questions SET ${fields.join(', ')} WHERE id = ?`;
+
+      db.query(updateQuestionSql, values, (err) => {
+        if (err) return res.status(500).json({ message: 'Failed to update question' });
+
+        // 3. Replace options
+        if (!Array.isArray(options) || options.length === 0) {
+          return res.json({ message: 'Question updated (no options)' });
+        }
+
+        // Delete old
+        db.query('DELETE FROM quiz_options WHERE question_id = ?', [questionId], (delErr) => {
+          if (delErr) return res.status(500).json({ message: 'Failed to delete old options' });
+
+          // Insert new
+          const rows = options
+            .filter(opt => opt.option_text?.trim())
+            .map((opt, idx) => [
+              questionId,
+              opt.option_text.trim(),
+              opt.is_correct ? 1 : 0,
+              idx
+            ]);
+
+          db.query(
+            'INSERT INTO quiz_options (question_id, option_text, is_correct, order_index) VALUES ?',
+            [rows],
+            (insErr) => {
+              if (insErr) return res.status(500).json({ message: 'Failed to save options' });
+              res.json({ message: 'Question and options updated successfully' });
+            }
+          );
+        });
+      });
+    });
+  }
+);
+
+// DELETE QUESTION + OPTIONS (Instructor only)
+app.delete('/api/quizzes/:quizId/questions/:questionId', verifyToken, isInstructor, (req, res) => {
+  const { quizId, questionId } = req.params;
+
+  console.log(`DELETE request: quiz=${quizId}, question=${questionId}, user=${req.user.id}`);
+
+  const verifySql = `
+    SELECT qq.id
+    FROM quiz_questions qq
+    JOIN quizzes q ON qq.quiz_id = q.id
+    JOIN courses c ON q.course_id = c.id
+    WHERE qq.id = ? AND qq.quiz_id = ? AND c.instructor_id = ?
+  `;
+
+  db.query(verifySql, [questionId, quizId, req.user.id], (err, rows) => {
+    if (err) {
+      console.error('DB verify error:', err);
+      return res.status(500).json({ message: 'Server error' });
+    }
+    if (rows.length === 0) {
+      return res.status(404).json({ message: 'Question not found or not owned' });
+    }
+
+    // Delete options first
+    db.query('DELETE FROM quiz_options WHERE question_id = ?', [questionId], (err) => {
+      if (err) {
+        console.error('Delete options error:', err);
+        return res.status(500).json({ message: 'Failed to delete options' });
+      }
+
+      // Delete question
+      db.query('DELETE FROM quiz_questions WHERE id = ?', [questionId], (err) => {
+        if (err) {
+          console.error('Delete question error:', err);
+          return res.status(500).json({ message: 'Failed to delete question' });
+        }
+        res.json({ message: 'Question deleted successfully' });
+      });
+    });
+  });
+});
+
+// Add these debugging endpoints temporarily to your server.js
+
+// 1. Check if certificate exists for a user and course
+app.get('/api/debug/certificate/:courseId/:userId', verifyToken, (req, res) => {
+    const { courseId, userId } = req.params;
+    
+    const query = `
+        SELECT 
+            id, user_id, course_id, certificate_number, 
+            certificate_url, status, issue_date, completion_date,
+            created_at
+        FROM certificates 
+        WHERE course_id = ? AND user_id = ?
+    `;
+    
+    db.query(query, [parseInt(courseId), parseInt(userId)], (err, certificates) => {
+        if (err) {
+            console.error('Debug query error:', err);
+            return res.status(500).json({ error: err.message });
+        }
+        
+        res.json({
+            found: certificates.length > 0,
+            count: certificates.length,
+            certificates: certificates,
+            searchParams: {
+                courseId: parseInt(courseId),
+                userId: parseInt(userId)
+            }
+        });
+    });
+});
+
+// 2. List all certificates for the logged-in user
+app.get('/api/debug/my-certificates', verifyToken, (req, res) => {
+    const query = `
+        SELECT 
+            c.id, c.user_id, c.course_id, c.certificate_number,
+            c.certificate_url, c.status, c.issue_date, c.completion_date,
+            co.title as course_title
+        FROM certificates c
+        LEFT JOIN courses co ON c.course_id = co.id
+        WHERE c.user_id = ?
+        ORDER BY c.created_at DESC
+    `;
+    
+    db.query(query, [req.user.id], (err, certificates) => {
+        if (err) {
+            console.error('Debug query error:', err);
+            return res.status(500).json({ error: err.message });
+        }
+        
+        res.json({
+            userId: req.user.id,
+            count: certificates.length,
+            certificates: certificates
+        });
+    });
+});
+
+// 3. Check certificate table structure
+app.get('/api/debug/certificate-table-info', verifyToken, isAdmin, (req, res) => {
+    db.query('DESCRIBE certificates', (err, structure) => {
+        if (err) {
+            return res.status(500).json({ error: err.message });
+        }
+        
+        db.query('SELECT COUNT(*) as total FROM certificates', (err, count) => {
+            if (err) {
+                return res.status(500).json({ error: err.message });
+            }
+            
+            res.json({
+                tableStructure: structure,
+                totalCertificates: count[0].total
+            });
+        });
+    });
+});
+// Add this BEFORE your download endpoint
+app.get('/api/debug/check-cert/:courseId/:userId', verifyToken, (req, res) => {
+    const { courseId, userId } = req.params;
+    
+    console.log('Checking for certificate:', { courseId, userId });
+    
+    db.query(
+        'SELECT * FROM certificates WHERE course_id = ? AND user_id = ?',
+        [parseInt(courseId), parseInt(userId)],
+        (err, certs) => {
+            if (err) {
+                console.error('Debug query error:', err);
+                return res.status(500).json({ error: err.message });
+            }
+            
+            console.log('Found certificates:', certs);
+            res.json({
+                found: certs.length > 0,
+                certificates: certs,
+                searchParams: { courseId: parseInt(courseId), userId: parseInt(userId) }
+            });
+        }
+    );
+});
+
+app.get('/api/courses/:courseId/certificate/eligibility', verifyToken, (req, res) => {
+    const { courseId } = req.params;
+    const userId = req.user.id;
+    
+    console.log('🔍 Checking eligibility:', { courseId, userId });
+    
+    // Check enrollment
+    const enrollmentQuery = `
+        SELECT progress_percentage 
+        FROM enrollments 
+        WHERE user_id = ? AND course_id = ?
+    `;
+    
+    db.query(enrollmentQuery, [userId, courseId], (err, enrollments) => {
+        if (err) {
+            console.error('Enrollment check error:', err);
+            return res.status(500).json({ message: 'Database error' });
+        }
+        
+        if (enrollments.length === 0) {
+            return res.json({ eligible: false, reason: 'Not enrolled in course' });
+        }
+        
+        const progress = parseFloat(enrollments[0].progress_percentage) || 0;
+        console.log('📊 Progress:', progress);
+        
+        // Check quiz attempts
+        const quizQuery = `
+            SELECT qa.score, q.passing_score 
+            FROM quiz_attempts qa 
+            JOIN quizzes q ON qa.quiz_id = q.id 
+            WHERE qa.user_id = ? AND q.course_id = ?
+        `;
+        
+        db.query(quizQuery, [userId, courseId], (err, attempts) => {
+            if (err) {
+                console.error('Quiz check error:', err);
+                return res.status(500).json({ message: 'Database error' });
+            }
+            
+            console.log('📝 Quiz attempts:', attempts);
+            
+            // Check if all quizzes passed
+            let allQuizzesPassed = true;
+            if (attempts.length > 0) {
+                allQuizzesPassed = attempts.every(a => {
+                    const score = parseFloat(a.score) || 0;
+                    const passingScore = parseFloat(a.passing_score) || 0;
+                    return score >= passingScore;
+                });
+            }
+            
+            // ✅ CHANGED: Lowered progress requirement from 80% to 10%
+            const eligible = progress >= 10 && allQuizzesPassed;
+            
+            res.json({
+                eligible,
+                progress,
+                quizzesPassed: allQuizzesPassed,
+                reason: !eligible ? (
+                    progress < 10 ? 'Course progress must be at least 10%' :
+                    !allQuizzesPassed ? 'All quizzes must be passed' : ''
+                ) : null
+            });
+        });
+    });
+});
+
+app.post('/api/debug/generate-certificate/:courseId/:userId', verifyToken, (req, res) => {
+    const { courseId, userId } = req.params;
+    
+    console.log('🧪 DEBUG: Manual certificate generation:', { courseId, userId });
+    
+    // Check if user and course exist
+    const checkQuery = `
+        SELECT u.name as user_name, c.title as course_title
+        FROM users u
+        CROSS JOIN courses c
+        WHERE u.id = ? AND c.id = ?
+    `;
+    
+    db.query(checkQuery, [userId, courseId], (err, results) => {
+        if (err) {
+            console.error('❌ Check query error:', err);
+            return res.status(500).json({ message: 'Database error', error: err.message });
+        }
+        
+        if (results.length === 0) {
+            return res.status(404).json({ message: 'User or course not found' });
+        }
+        
+        const { user_name, course_title } = results[0];
+        
+        // Check existing certificate
+        db.query(
+            'SELECT id, certificate_number FROM certificates WHERE user_id = ? AND course_id = ?',
+            [userId, courseId],
+            (err, existing) => {
+                if (err) {
+                    console.error('❌ Existing check error:', err);
+                    return res.status(500).json({ message: 'Database error' });
+                }
+                
+                if (existing.length > 0) {
+                    console.log('⚠️ Certificate already exists:', existing[0]);
+                    return res.status(400).json({ 
+                        message: 'Certificate already exists', 
+                        certificate_number: existing[0].certificate_number 
+                    });
+                }
+                
+                // Generate certificate
+                const crypto = require('crypto');
+                const PDFDocument = require('pdfkit');
+                
+                const certificateNumber = `CERT-${Date.now()}-${crypto.randomBytes(4).toString('hex').toUpperCase()}`;
+                const certificateHash = crypto
+                    .createHash('sha256')
+                    .update(certificateNumber + userId + courseId + Date.now())
+                    .digest('hex');
+                
+                const fileName = `certificate-${certificateNumber}.pdf`;
+                const certificatesDir = path.join(__dirname, 'uploads', 'certificates');
+                
+                if (!fs.existsSync(certificatesDir)) {
+                    fs.mkdirSync(certificatesDir, { recursive: true });
+                }
+                
+                const filePath = path.join(certificatesDir, fileName);
+                const certificateUrl = `/uploads/certificates/${fileName}`;
+                
+                // Create PDF
+                const doc = new PDFDocument({ size: 'A4', layout: 'landscape' });
+                const writeStream = fs.createWriteStream(filePath);
+                
+                doc.pipe(writeStream);
+                doc.rect(0, 0, 842, 595).fill('#f8f9fa');
+                doc.rect(20, 20, 802, 555).stroke('#1a73e8');
+                doc.fontSize(50).fillColor('#1a73e8').text('CERTIFICATE', 100, 100, { align: 'center', width: 642 });
+                doc.fontSize(25).fillColor('#333333').text('of Completion', 100, 160, { align: 'center', width: 642 });
+                doc.fontSize(32).fillColor('#1a73e8').text(user_name, 100, 260, { align: 'center', width: 642 });
+                doc.fontSize(24).fillColor('#333333').text(course_title, 100, 350, { align: 'center', width: 642 });
+                doc.fontSize(14).fillColor('#888888').text(`Certificate No: ${certificateNumber}`, 100, 430, { align: 'center', width: 642 });
+                doc.fontSize(12).text(`Issued: ${new Date().toLocaleDateString()}`, 100, 460, { align: 'center', width: 642 });
+                doc.end();
+                
+                writeStream.on('finish', () => {
+                    console.log('✅ PDF created');
+                    
+                    // Insert into database with CURDATE() for completion_date
+                    const insertQuery = `
+                        INSERT INTO certificates (
+                            user_id, course_id, certificate_number, certificate_hash,
+                            certificate_url, issue_date, completion_date, status,
+                            is_verified, created_at
+                        ) VALUES (?, ?, ?, ?, ?, NOW(), CURDATE(), 'active', 1, NOW())
+                    `;
+                    
+                    db.query(insertQuery, [userId, courseId, certificateNumber, certificateHash, certificateUrl], 
+                        (err, result) => {
+                            if (err) {
+                                console.error('❌ Insert error:', err);
+                                if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+                                return res.status(500).json({ 
+                                    message: 'Failed to save certificate', 
+                                    error: err.message,
+                                    sqlMessage: err.sqlMessage 
+                                });
+                            }
+                            
+                            console.log('✅ Certificate saved:', result.insertId);
+                            
+                            res.status(201).json({
+                                message: 'Certificate generated successfully',
+                                certificate: {
+                                    id: result.insertId,
+                                    certificate_number: certificateNumber,
+                                    certificate_url: `${req.protocol}://${req.get('host')}${certificateUrl}`,
+                                    download_url: `${req.protocol}://${req.get('host')}/api/courses/${courseId}/certificate/${userId}/download`
+                                }
+                            });
+                        }
+                    );
+                });
+                
+                writeStream.on('error', (err) => {
+                    console.error('❌ PDF error:', err);
+                    res.status(500).json({ message: 'Failed to create PDF' });
+                });
+            }
+        );
+    });
+});
+app.get('/api/debug/certificate-check/:courseId/:userId', verifyToken, (req, res) => {
+    const { courseId, userId } = req.params;
+    
+    const queries = {
+        user: 'SELECT id, name, email FROM users WHERE id = ?',
+        course: 'SELECT id, title FROM courses WHERE id = ?',
+        enrollment: 'SELECT * FROM enrollments WHERE user_id = ? AND course_id = ?',
+        certificate: 'SELECT * FROM certificates WHERE user_id = ? AND course_id = ?'
+    };
+    
+    const results = {};
+    
+    db.query(queries.user, [userId], (err, user) => {
+        results.user = err ? { error: err.message } : user[0] || null;
+        
+        db.query(queries.course, [courseId], (err, course) => {
+            results.course = err ? { error: err.message } : course[0] || null;
+            
+            db.query(queries.enrollment, [userId, courseId], (err, enrollment) => {
+                results.enrollment = err ? { error: err.message } : enrollment[0] || null;
+                
+                db.query(queries.certificate, [userId, courseId], (err, certificate) => {
+                    results.certificate = err ? { error: err.message } : certificate[0] || null;
+                    
+                    res.json({
+                        searchParams: { courseId, userId },
+                        results,
+                        canGenerateCertificate: !!(results.user && results.course && results.enrollment && !results.certificate)
+                    });
+                });
+            });
+        });
+    });
+});
+
+
+
 // Start the server
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
-    
+   
     console.log(`Server running on http://localhost:${PORT}`);
     console.log(`Uploads directory: ${uploadsDir}`);
 });

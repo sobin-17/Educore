@@ -22,7 +22,7 @@ import {
     fetchUserQuizAttempts,
     generateCertificate,
     fetchUserCertificates
-    
+   
 } from '../api';
 import {
     BookOpen, User, LogOut, Book,
@@ -1101,7 +1101,7 @@ const ManageCourseMaterials = ({ course, onClose, onMaterialAdded, courseMateria
                     {copyMessage}
                 </div>
             )}
-            
+           
 
             {/* Add New Material Form */}
             <div className="border border-gray-200 p-6 rounded-lg mb-8">
@@ -1690,31 +1690,43 @@ const ManageQuizzes = ({ course, onClose, user }) => {
         }
     };
 
-    const handleUpdateQuestionSubmit = async (e) => {
-        e.preventDefault();
-        if (!validateQuestionForm()) return;
+const handleUpdateQuestionSubmit = async (e) => {
+  e.preventDefault();
+  if (!validateQuestionForm()) return;
 
-        setIsSubmittingQuestion(true);
-        try {
-            const questionDataToSend = {
-                question: questionFormData.question,
-                question_type: questionFormData.question_type,
-                correct_answer: questionFormData.correct_answer,
-                explanation: `Options: A. ${questionFormData.option_a} B. ${questionFormData.option_b} C. ${questionFormData.option_c} D. ${questionFormData.option_d}`,
-                points: questionFormData.points,
-                order_index: selectedQuestion.order_index,
-            };
-            await updateQuizQuestion(selectedQuiz.id, selectedQuestion.id, questionDataToSend);
-            setSubmitMessage('Question updated successfully!');
-            setSelectedQuestion(null);
-            loadQuestions(selectedQuiz.id);
-        } catch (err) {
-            console.error('Error updating question:', err);
-            setSubmitMessage(err.message || 'Failed to update question.');
-        } finally {
-            setIsSubmittingQuestion(false);
-        }
+  setIsSubmittingQuestion(true);
+  try {
+    const payload = {
+      question: questionFormData.question,
+      question_type: questionFormData.question_type,
+      correct_answer: questionFormData.correct_answer,
+      points: Number(questionFormData.points),
+      order_index: selectedQuestion.order_index,
+
+      // OPTIONAL: keep a free-text explanation if you still need it
+      // explanation: questionFormData.explanation || '',
+
+      // THIS IS THE IMPORTANT PART – array of options
+      options: [
+        { option_text: questionFormData.option_a, is_correct: questionFormData.correct_answer === 'A' },
+        { option_text: questionFormData.option_b, is_correct: questionFormData.correct_answer === 'B' },
+        { option_text: questionFormData.option_c, is_correct: questionFormData.correct_answer === 'C' },
+        { option_text: questionFormData.option_d, is_correct: questionFormData.correct_answer === 'D' },
+      ].filter(o => o.option_text?.trim()), // remove empty options
     };
+
+    await updateQuizQuestion(selectedQuiz.id, selectedQuestion.id, payload);
+
+    setSubmitMessage('Question updated successfully!');
+    setSelectedQuestion(null);
+    loadQuestions(selectedQuiz.id); // refresh list
+  } catch (err) {
+    console.error('Update error:', err);
+    setSubmitMessage(err.message || 'Failed to update question.');
+  } finally {
+    setIsSubmittingQuestion(false);
+  }
+};
 
     const handleEditQuestionClick = (question) => {
         // Parse explanation for options
@@ -2182,7 +2194,7 @@ const Dashboard = () => {
 
      const handleScheduleClassClick = () => {
          setShowScheduleForm(true);
-     }; 
+     };
 
      // NEW: Quiz Management States
      const [selectedCourseForQuizzes, setSelectedCourseForQuizzes] = useState(null);
@@ -2481,11 +2493,17 @@ const Dashboard = () => {
                             </button> */}
 
 {showScheduleForm && (
-            <div className="fixed inset-0 bg-gray-600 bg-opacity-75 flex items-center justify-center z-50 p-4">
-                <div className="bg-white rounded-xl shadow-2xl p-8 w-full max-w-2xl mx-auto">
+            <div className="fixed inset-0 bg-gray-600 bg-opacity-75 flex items-center justify-center z-50 p-4 overflow-y-auto">
+                <div className="bg-white rounded-xl shadow-2xl p-8 w-full max-w-2xl mx-auto max-h-[80vh] overflow-y-auto relative">
+                    <button
+                        onClick={() => setShowScheduleForm(false)}
+                        className="absolute top-4 right-4 text-gray-500 hover:text-gray-700 p-2 rounded-full hover:bg-gray-100 transition-colors"
+                    >
+                        <X className="h-6 w-6" />
+                    </button>
                     <ScheduleOnlineClassForm
                         // Assuming you have a `courses` state in your Dashboard component
-                        // courses={courses} 
+                        // courses={courses}
                         onClose={() => setShowScheduleForm(false)}
                         onSave={() => setShowScheduleForm(false)}
                     />
@@ -2493,7 +2511,7 @@ const Dashboard = () => {
             </div>
         )}
                         </div>
-                        
+                       
                     )}
 
                     {/* Content based on selected tab */}
@@ -2567,7 +2585,7 @@ const Dashboard = () => {
                                                 >
                                                     <Upload className="h-4 w-4 mr-1" /> Materials
                                                 </button>
-                                                
+                                               
                                                 {/* NEW: View Enrolled Students Button */}
                                                 <button
                                                     onClick={() => handleManageQuizzes(course)}
@@ -2656,7 +2674,7 @@ const Dashboard = () => {
                                         </div>
                                     ))}
                                 </div>
-                                
+                               
                             )}
                             <button
             onClick={() => setSelectedTab('live-classes')}
@@ -2669,7 +2687,7 @@ const Dashboard = () => {
             <Award className="h-6 w-6 mr-2" /> Certificates
         </button>
                         </div>
-                        
+                       
                     )}
                 </div>
             </div>

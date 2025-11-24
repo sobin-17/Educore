@@ -57,12 +57,29 @@ const CreateInstructorForm = ({ isOpen, onClose, onSuccess }) => {
             setErrors(validationErrors);
             return;
         }
+        
         setIsSubmitting(true);
         setErrors({});
         setSuccess('');
-
+    
+        // 🔥 FIXED: Debug + Proper FormData
+        console.log('📝 FORM DATA BEFORE SEND:', formData);
+        
+        const formDataToSend = new FormData();
+        formDataToSend.append('name', formData.name.trim());
+        formDataToSend.append('email', formData.email.trim());
+        formDataToSend.append('password', formData.password);
+        formDataToSend.append('phone', formData.phone || '');
+        formDataToSend.append('country', formData.country || '');
+        formDataToSend.append('bio', formData.bio || '');
+    
+        // 🔥 DEBUG: Show what's being sent
+        for (let [key, value] of formDataToSend.entries()) {
+            console.log(`📤 Sending ${key}:`, value);
+        }
+    
         try {
-            await createInstructor(formData);
+            await createInstructor(formDataToSend);
             setSuccess('Instructor created successfully!');
             setFormData({ name: '', email: '', password: '', phone: '', country: '', bio: '' });
             setTimeout(() => {
@@ -70,12 +87,12 @@ const CreateInstructorForm = ({ isOpen, onClose, onSuccess }) => {
                 onClose();
             }, 1500);
         } catch (err) {
-            setErrors({ general: err.response?.data?.message || 'Failed to create instructor' });
+            console.error('❌ Create instructor error:', err);
+            setErrors({ general: err.message });
         } finally {
             setIsSubmitting(false);
         }
     };
-
     const handleChange = (e) => {
         setFormData(prev => ({ ...prev, [e.target.name]: e.target.value }));
         setErrors(prev => ({ ...prev, [e.target.name]: '' }));
@@ -1033,7 +1050,7 @@ const AdminDashboard = () => {
                         <div className="flex items-center">
                             <Link to="" className="inline-flex items-center">
                                 <BookOpen className="h-8 w-8 text-blue-600" />
-                                <span className="ml-2 text-xl font-bold text-gray-900">EduPlatform</span>
+                                <span className="ml-2 text-xl font-bold text-gray-900">EduCore</span>
                                 <span className="ml-2 text-sm bg-red-100 text-red-800 px-2 py-1 rounded-full">Admin</span>
                             </Link>
                         </div>
