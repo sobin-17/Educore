@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom'; // Import Link for navigation
 import { BookOpen, Users, Award, Star, Play, ChevronRight, Menu, X, User, LogOut } from 'lucide-react';
 import { fetchCourses } from '../api'; // Corrected path: Assuming api.js is in the src directory
+import demoVideo from '../assets/video/demo.mp4';
+
 
 const HomePage = () => {
     const [isMenuOpen, setIsMenuOpen] = useState(false);
@@ -9,6 +11,7 @@ const HomePage = () => {
     const [popularCourses, setPopularCourses] = useState([]);
     const [loadingCourses, setLoadingCourses] = useState(true);
     const [coursesError, setCoursesError] = useState('');
+    const [isVideoModalOpen, setIsVideoModalOpen] = useState(false);
 
     useEffect(() => {
         // Check if user is logged in
@@ -51,6 +54,11 @@ const HomePage = () => {
         }
     };
 
+    // Function to open/close video modal
+    const toggleVideoModal = () => {
+        setIsVideoModalOpen(!isVideoModalOpen);
+    };
+
     return (
         <div className="min-h-screen bg-gradient-to-b from-blue-50 to-white font-sans">
             {/* Header */}
@@ -60,7 +68,7 @@ const HomePage = () => {
                         <div className="flex items-center">
                             <Link to="/" className="inline-flex items-center text-blue-600 hover:text-blue-800 transition-colors duration-200">
                                 <BookOpen className="h-8 w-8" />
-                                <span className="ml-2 text-xl font-bold text-gray-900">EduPlatform</span>
+                                <span className="ml-2 text-xl font-bold text-gray-900">EduCore</span>
                             </Link>
                         </div>
 
@@ -68,7 +76,7 @@ const HomePage = () => {
                         <nav className="hidden md:flex items-center space-x-8">
                             <Link to="/" className="text-gray-700 hover:text-blue-600 font-medium">Home</Link>{/* Hero Section */}
                             <Link to="/course-card" className="text-gray-700 hover:text-blue-600 font-medium">Courses</Link> {/* Placeholder route */}
-                            <Link to="/profile-settings" className="text-gray-700 hover:text-blue-600 font-medium">About</Link> {/* Placeholder route */}
+                            <Link to="/about" className="text-gray-700 hover:text-blue-600 font-medium">About</Link> {/* Placeholder route */}
                             <Link to="/contact" className="text-gray-700 hover:text-blue-600 font-medium">Contact</Link> {/* Placeholder route */}
                         </nav>
 
@@ -155,13 +163,45 @@ const HomePage = () => {
                             Get Started Free
                             <ChevronRight className="ml-2 h-5 w-5" />
                         </button>
-                        <button className="border-2 border-gray-300 text-gray-700 px-8 py-4 rounded-lg font-semibold hover:bg-gray-50 transition-colors flex items-center justify-center shadow-md">
+                        <button
+                            onClick={toggleVideoModal}
+                            className="border-2 border-gray-300 text-gray-700 px-8 py-4 rounded-lg font-semibold hover:bg-gray-50 transition-colors flex items-center justify-center shadow-md"
+                        >
                             <Play className="mr-2 h-5 w-5" />
                             Watch Demo
                         </button>
                     </div>
                 </div>
+
+                {/* Full-Screen Video Modal */}
+{isVideoModalOpen && (
+    <div className="fixed inset-0 bg-black z-50 flex items-center justify-center">
+        <button
+            onClick={toggleVideoModal}
+            className="absolute top-4 right-4 text-white hover:text-gray-300 transition-colors z-60"
+            aria-label="Close video"
+        >
+            <X className="h-8 w-8" />
+        </button>
+        <video
+            className="w-full h-full object-cover scale-54"
+            autoPlay
+            loop
+            unmuted
+            playsInline
+        >
+            <source 
+                src={demoVideo} 
+    type="video/mp4"
+            />
+            Your browser does not support the video tag.
+        </video>
+    </div>
+)}
+                
             </section>
+
+            
 
             {/* Stats Section */}
             <section className="py-16 bg-white shadow-inner">
@@ -258,7 +298,9 @@ const HomePage = () => {
                                             <div className="flex items-center">
                                                 <Star className="h-4 w-4 text-yellow-400 fill-current" />
                                                 <span className="ml-1 text-sm text-gray-600">
-                                                    {course.average_rating ? course.average_rating.toFixed(1) : 'N/A'} ({course.review_count || 0} reviews)
+                                                    {course.average_rating && !isNaN(Number(course.average_rating)) 
+                                                        ? Number(course.average_rating).toFixed(1) 
+                                                        : 'N/A'} ({course.review_count || 0} reviews)
                                                 </span>
                                             </div>
                                             <span className="text-2xl font-bold text-blue-600">
@@ -276,6 +318,8 @@ const HomePage = () => {
                     )}
                 </div>
             </section>
+
+            
 
             {/* CTA Section */}
             <section className="py-20 bg-blue-600 text-white">
@@ -332,15 +376,15 @@ const HomePage = () => {
                         <div>
                             <h3 className="font-semibold mb-4">Contact Info</h3>
                             <div className="space-y-2 text-gray-400">
-                                <p>Email: info@eduplatform.com</p>
-                                <p>Phone: +1 (555) 123-4567</p>
-                                <p>Address: 123 Education St, Learning City</p>
+                                <p>Email: info@educore.com</p>
+                                <p>Phone: +91 7658762300</p>
+                                <p>Address: EduCore Learning, Gandhinagar 2nd Street, Kottayam</p>
                             </div>
                         </div>
                     </div>
 
                     <div className="border-t border-gray-800 mt-8 pt-8 text-center">
-                        <p className="text-gray-400">© 2025 EduPlatform. All rights reserved.</p>
+                        <p className="text-gray-400">© 2025 Educore. All rights reserved.</p>
                     </div>
                 </div>
             </footer>

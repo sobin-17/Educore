@@ -165,7 +165,7 @@ const CourseCard = () => {
                         <div className="flex items-center">
                             <Link to="/" className="inline-flex items-center text-blue-600 hover:text-blue-800 transition-colors duration-200">
                                 <BookOpen className="h-8 w-8" />
-                                <span className="ml-2 text-xl font-bold text-gray-900">EduPlatform</span>
+                                <span className="ml-2 text-xl font-bold text-gray-900">EduCore</span>
                             </Link>
                         </div>
 
@@ -416,7 +416,9 @@ const CourseCard = () => {
                                                 <div className="flex items-center">
                                                     <Star className="h-4 w-4 text-yellow-400 fill-current" />
                                                     <span className="ml-1 text-sm text-gray-600">
-                                                        {course.average_rating ? course.average_rating.toFixed(1) : 'N/A'}
+                                                    {course.average_rating && !isNaN(Number(course.average_rating)) 
+                                                        ? Number(course.average_rating).toFixed(1) 
+                                                        : 'N/A'} ({course.review_count || 0} reviews)
                                                     </span>
                                                     <span className="ml-1 text-sm text-gray-500">
                                                         ({course.review_count || 0})
@@ -492,7 +494,9 @@ const CourseCard = () => {
                                                     <div className="flex items-center">
                                                         <Star className="h-4 w-4 text-yellow-400 fill-current" />
                                                         <span className="ml-1 text-sm text-gray-600">
-                                                            {course.average_rating ? course.average_rating.toFixed(1) : 'N/A'}
+                                                        {course.average_rating && !isNaN(Number(course.average_rating)) 
+                                                        ? Number(course.average_rating).toFixed(1) 
+                                                        : 'N/A'} ({course.review_count || 0} reviews)
                                                         </span>
                                                         <span className="ml-1 text-sm text-gray-500">
                                                             ({course.review_count || 0})

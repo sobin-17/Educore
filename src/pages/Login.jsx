@@ -17,6 +17,7 @@ const Login = () => {
     
     try {
       const { token, user } = await loginUser(form);
+      console.log('Login response:', { token, user });
       localStorage.setItem('token', token);
       localStorage.setItem('user', JSON.stringify(user));
       
@@ -30,6 +31,7 @@ const Login = () => {
       }
     } catch (err) {
       setError(err.response?.data?.message || 'Login failed');
+      console.error('Login error:', err);
     } finally {
       setLoading(false);
     }
@@ -42,7 +44,7 @@ const Login = () => {
         <div className="text-center">
           <Link to="/" className="inline-flex items-center">
             <BookOpen className="h-12 w-12 text-blue-600" />
-            <span className="ml-2 text-2xl font-bold text-gray-900">EduPlatform</span>
+            <span className="ml-2 text-2xl font-bold text-gray-900">EduCore</span>
           </Link>
           <h2 className="mt-6 text-3xl font-extrabold text-gray-900">
             Sign in to your account
@@ -145,8 +147,13 @@ const Login = () => {
           </Link>
         </div>
       </div>
+      
     </div>
+
+    
   );
 };
+
+
 
 export default Login;
