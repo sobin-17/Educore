@@ -36,7 +36,8 @@ const Modal = ({ isOpen, onClose, title, children }) => {
 // Create Instructor Form
 const CreateInstructorForm = ({ isOpen, onClose, onSuccess }) => {
     const [formData, setFormData] = useState({
-        name: '', email: '', password: '', phone: '', country: '', bio: ''
+        name: '', email: '', password: '', confirmPassword: '',
+        phone: '', country: '', bio: ''
     });
     const [errors, setErrors] = useState({});
     const [isSubmitting, setIsSubmitting] = useState(false);
@@ -44,9 +45,46 @@ const CreateInstructorForm = ({ isOpen, onClose, onSuccess }) => {
 
     const validateForm = () => {
         const newErrors = {};
-        if (!formData.name.trim()) newErrors.name = 'Name is required';
-        if (!formData.email.match(/^\S+@\S+\.\S+$/)) newErrors.email = 'Valid email is required';
-        if (formData.password.length < 6) newErrors.password = 'Password must be at least 6 characters';
+
+        // Name
+        if (!formData.name.trim()) {
+            newErrors.name = 'Name is required';
+        }
+
+        // Email
+        if (!formData.email.match(/^\S+@\S+\.\S+$/)) {
+            newErrors.email = 'Please enter a valid email address';
+        }
+
+        // Password
+        if (formData.password.length < 6) {
+            newErrors.password = 'Password must be at least 6 characters';
+        }
+        if (formData.password !== formData.confirmPassword) {
+            newErrors.confirmPassword = 'Passwords do not match';
+        }
+
+        // Phone (optional but strict if provided)
+        if (formData.phone && formData.phone.trim()) {
+            const cleanPhone = formData.phone.replace(/[\s\-\(\)]+/g, '');
+            if (cleanPhone.length < 10) {
+                newErrors.phone = 'Phone number too short';
+            } else if (cleanPhone.length > 15) {
+                newErrors.phone = 'Phone number too long';
+            } else if (!/^[0-9+\-\s\(\)]+$/.test(formData.phone)) {
+                newErrors.phone = 'Invalid characters in phone number';
+            }
+        }
+
+        // Country (optional but valid format)
+        if (formData.country && formData.country.trim()) {
+            if (formData.country.trim().length < 2) {
+                newErrors.country = 'Country name too short';
+            } else if (!/^[A-Za-z\s\-'&]+$/.test(formData.country.trim())) {
+                newErrors.country = 'Country name contains invalid characters';
+            }
+        }
+
         return newErrors;
     };
 
@@ -57,103 +95,163 @@ const CreateInstructorForm = ({ isOpen, onClose, onSuccess }) => {
             setErrors(validationErrors);
             return;
         }
-        
+
         setIsSubmitting(true);
         setErrors({});
         setSuccess('');
-    
-        // 🔥 FIXED: Debug + Proper FormData
-        console.log('📝 FORM DATA BEFORE SEND:', formData);
-        
+
         const formDataToSend = new FormData();
         formDataToSend.append('name', formData.name.trim());
         formDataToSend.append('email', formData.email.trim());
         formDataToSend.append('password', formData.password);
-        formDataToSend.append('phone', formData.phone || '');
-        formDataToSend.append('country', formData.country || '');
-        formDataToSend.append('bio', formData.bio || '');
-    
-        // 🔥 DEBUG: Show what's being sent
-        for (let [key, value] of formDataToSend.entries()) {
-            console.log(`📤 Sending ${key}:`, value);
-        }
-    
+        if (formData.phone.trim()) formDataToSend.append('phone', formData.phone.trim());
+        if (formData.country.trim()) formDataToSend.append('country', formData.country.trim());
+        if (formData.bio.trim()) formDataToSend.append('bio', formData.bio.trim());
+
         try {
             await createInstructor(formDataToSend);
             setSuccess('Instructor created successfully!');
-            setFormData({ name: '', email: '', password: '', phone: '', country: '', bio: '' });
             setTimeout(() => {
                 onSuccess();
                 onClose();
             }, 1500);
         } catch (err) {
-            console.error('❌ Create instructor error:', err);
-            setErrors({ general: err.message });
+            setErrors({ 
+                general: err.response?.data?.message || 
+                        err.response?.data?.error || 
+                        'Failed to create instructor' 
+            });
         } finally {
             setIsSubmitting(false);
         }
     };
+
     const handleChange = (e) => {
-        setFormData(prev => ({ ...prev, [e.target.name]: e.target.value }));
-        setErrors(prev => ({ ...prev, [e.target.name]: '' }));
+        const { name, value } = e.target;
+        setFormData(prev => ({ ...prev, [name]: value }));
+        // Clear error when user starts typing
+        if (errors[name]) {
+            setErrors(prev => ({ ...prev, [name]: '' }));
+        }
     };
 
     return (
         <Modal isOpen={isOpen} onClose={onClose} title="Create New Instructor">
-            <form onSubmit={handleSubmit} className="space-y-4">
+            <form onSubmit={handleSubmit} className="space-y-5">
+                {/* Name */}
                 <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Name</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Full Name <span className="text-red-500">*</span>
+                    </label>
                     <input
                         type="text"
                         name="name"
                         value={formData.name}
                         onChange={handleChange}
-                        className={`w-full border ${errors.name ? 'border-red-500' : 'border-gray-300'} rounded-lg px-3 py-2 focus:ring-blue-500 focus:border-blue-500`}
+                        placeholder="John Doe"
+                        className={`w-full px-4 py-2.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition ${
+                            errors.name ? 'border-red-500' : 'border-gray-300'
+                        }`}
                     />
-                    {errors.name && <p className="text-red-500 text-xs mt-1">{errors.name}</p>}
+                    {errors.name && <p className="text-red-600 text-xs mt-1 flex items-center"><AlertTriangle className="h-3 w-3 mr-1"/>{errors.name}</p>}
                 </div>
+
+                {/* Email */}
                 <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Email Address <span className="text-red-500">*</span>
+                    </label>
                     <input
                         type="email"
                         name="email"
                         value={formData.email}
                         onChange={handleChange}
-                        className={`w-full border ${errors.email ? 'border-red-500' : 'border-gray-300'} rounded-lg px-3 py-2 focus:ring-blue-500 focus:border-blue-500`}
+                        placeholder="john@example.com"
+                        className={`w-full px-4 py-2.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition ${
+                            errors.email ? 'border-red-500' : 'border-gray-300'
+                        }`}
                     />
-                    {errors.email && <p className="text-red-500 text-xs mt-1">{errors.email}</p>}
+                    {errors.email && <p className="text-red-600 text-xs mt-1 flex items-center"><AlertTriangle className="h-3 w-3 mr-1"/>{errors.email}</p>}
                 </div>
+
+                {/* Password & Confirm */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                            Password <span className="text-red-500">*</span>
+                        </label>
+                        <input
+                            type="password"
+                            name="password"
+                            value={formData.password}
+                            onChange={handleChange}
+                            className={`w-full px-4 py-2.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition ${
+                                errors.password ? 'border-red-500' : 'border-gray-300'
+                            }`}
+                        />
+                        {errors.password && <p className="text-red-600 text-xs mt-1 flex items-center"><AlertTriangle className="h-3 w-3 mr-1"/>{errors.password}</p>}
+                    </div>
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                            Confirm Password <span className="text-red-500">*</span>
+                        </label>
+                        <input
+                            type="password"
+                            name="confirmPassword"
+                            value={formData.confirmPassword}
+                            onChange={handleChange}
+                            className={`w-full px-4 py-2.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition ${
+                                errors.confirmPassword ? 'border-red-500' : 'border-gray-300'
+                            }`}
+                        />
+                        {errors.confirmPassword && <p className="text-red-600 text-xs mt-1 flex items-center"><AlertTriangle className="h-3 w-3 mr-1"/>{errors.confirmPassword}</p>}
+                    </div>
+                </div>
+
+                {/* Phone */}
                 <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Password</label>
-                    <input
-                        type="password"
-                        name="password"
-                        value={formData.password}
-                        onChange={handleChange}
-                        className={`w-full border ${errors.password ? 'border-red-500' : 'border-gray-300'} rounded-lg px-3 py-2 focus:ring-blue-500 focus:border-blue-500`}
-                    />
-                    {errors.password && <p className="text-red-500 text-xs mt-1">{errors.password}</p>}
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Phone Number <span className="text-gray-400 text-xs">(Optional)</span>
+                    </label>
+                    <div className="relative">
+                        <Phone className="absolute left-3 top-3.5 h-5 w-5 text-gray-400" />
+                        <input
+                            type="tel"
+                            name="phone"
+                            value={formData.phone}
+                            onChange={handleChange}
+                            placeholder="+1234567890 or 0123456789"
+                            className={`w-full pl-11 pr-4 py-2.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition ${
+                                errors.phone ? 'border-red-500' : 'border-gray-300'
+                            }`}
+                        />
+                    </div>
+                    {errors.phone && <p className="text-red-600 text-xs mt-1 flex items-center"><AlertTriangle className="h-3 w-3 mr-1"/>{errors.phone}</p>}
+                    <p className="text-xs text-gray-500 mt-1">Include country code if international (e.g., +91, +1)</p>
                 </div>
+
+                {/* Country */}
                 <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Phone (Optional)</label>
-                    <input
-                        type="tel"
-                        name="phone"
-                        value={formData.phone}
-                        onChange={handleChange}
-                        className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-blue-500 focus:border-blue-500"
-                    />
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Country <span className="text-gray-400 text-xs">(Optional)</span>
+                    </label>
+                    <div className="relative">
+                        <Globe className="absolute left-3 top-3.5 h-5 w-5 text-gray-400" />
+                        <input
+                            type="text"
+                            name="country"
+                            value={formData.country}
+                            onChange={handleChange}
+                            placeholder="United States, India, Nigeria..."
+                            className={`w-full pl-11 pr-4 py-2.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition ${
+                                errors.country ? 'border-red-500' : 'border-gray-300'
+                            }`}
+                        />
+                    </div>
+                    {errors.country && <p className="text-red-600 text-xs mt-1 flex items-center"><AlertTriangle className="h-3 w-3 mr-1"/>{errors.country}</p>}
                 </div>
-                <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Country (Optional)</label>
-                    <input
-                        type="text"
-                        name="country"
-                        value={formData.country}
-                        onChange={handleChange}
-                        className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-blue-500 focus:border-blue-500"
-                    />
-                </div>
+
+                {/* Bio */}
                 <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Bio (Optional)</label>
                     <textarea
@@ -161,36 +259,50 @@ const CreateInstructorForm = ({ isOpen, onClose, onSuccess }) => {
                         value={formData.bio}
                         onChange={handleChange}
                         rows="3"
-                        className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-blue-500 focus:border-blue-500"
+                        placeholder="Tell us about your teaching experience..."
+                        className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                     />
                 </div>
+
+                {/* Messages */}
                 {errors.general && (
-                    <div className="p-3 bg-red-100 border border-red-400 text-red-700 rounded-lg">{errors.general}</div>
+                    <div className="p-4 bg-red-50 border border-red-300 rounded-lg text-red-700 text-sm flex items-center">
+                        <AlertTriangle className="h-5 w-5 mr-2" />
+                        {errors.general}
+                    </div>
                 )}
                 {success && (
-                    <div className="p-3 bg-green-100 border border-green-400 text-green-700 rounded-lg">{success}</div>
+                    <div className="p-4 bg-green-50 border border-green-300 rounded-lg text-green-700 text-sm flex items-center">
+                        <CheckCircle className="h-5 w-5 mr-2" />
+                        {success}
+                    </div>
                 )}
-                <div className="flex justify-end space-x-3 pt-4">
+
+                {/* Buttons */}
+                <div className="flex justify-end space-x-3 pt-4 border-t">
                     <button
                         type="button"
                         onClick={onClose}
-                        className="px-6 py-3 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50"
+                        className="px-6 py-3 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition"
                     >
                         Cancel
                     </button>
                     <button
                         type="submit"
                         disabled={isSubmitting}
-                        className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
+                        className="px-8 py-3 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-lg hover:from-blue-700 hover:to-blue-800 disabled:opacity-60 transition shadow-md flex items-center"
                     >
-                        {isSubmitting ? 'Creating...' : 'Create Instructor'}
+                        {isSubmitting ? (
+                            <>Creating...</>
+                        ) : (
+                            <>Create Instructor</>
+                        )}
                     </button>
                 </div>
             </form>
         </Modal>
     );
 };
-
 // Edit User Form
 const EditUserForm = ({ isOpen, onClose, user, onSuccess }) => {
     const [formData, setFormData] = useState({

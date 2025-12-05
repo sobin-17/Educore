@@ -38,7 +38,20 @@ const Register = () => {
       const digitsOnly = val.replace(/\D/g, '');
       return digitsOnly.length === 10 ? '' : 'Phone number must be 10 digits';
     },
-    bio: (val) => val.length <= 500 ? '' : 'Bio cannot exceed 500 characters'
+    bio: (val) => val.length <= 500 ? '' : 'Bio cannot exceed 500 characters',
+
+    // NEW: Age validation (must be 18+)
+    dateOfBirth: (val) => {
+      if (!val) return ''; // optional field
+      const birthDate = new Date(val);
+      const today = new Date();
+      let age = today.getFullYear() - birthDate.getFullYear();
+      const monthDiff = today.getMonth() - birthDate.getMonth();
+      if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+        age--;
+      }
+      return age >= 18 ? '' : 'You must be at least 18 years old to register';
+    }
   };
 
   const handleChange = (field, value) => {
@@ -73,7 +86,7 @@ const Register = () => {
   const validateStep = (step) => {
     const stepFields = step === 1
       ? ['name', 'email', 'password', 'confirmPassword']
-      : ['phone', 'bio'];
+      : ['phone', 'bio', 'dateOfBirth']; // added dateOfBirth here so age is checked on submit
     let stepErrors = {};
     stepFields.forEach(f => {
       if (validators[f]) {
@@ -260,129 +273,129 @@ const Register = () => {
             )}
 
             {/* Step 2 */}
-{currentStep === 2 && (
-  <div>
-    <div className="text-center mb-6">
-      <h3 className="text-lg font-medium text-gray-900 animate-fade-in">Optional Information</h3>
-      <p className="text-sm text-gray-600 animate-fade-in delay-100">Tell us a bit more about yourself</p>
-    </div>
+            {currentStep === 2 && (
+              <div>
+                <div className="text-center mb-6">
+                  <h3 className="text-lg font-medium text-gray-900 animate-fade-in">Optional Information</h3>
+                  <p className="text-sm text-gray-600 animate-fade-in delay-100">Tell us a bit more about yourself</p>
+                </div>
 
-    {/* Bio */}
-    <div className="animate-slide-up">
-      <label htmlFor="bio" className="block text-sm font-medium text-gray-700 mb-2">Bio (Optional)</label>
-      <div className="relative">
-        <FileText className="absolute left-3 top-3 h-5 w-5 text-gray-400" />
-        <textarea
-          id="bio"
-          rows="3"
-          className="w-full pl-10 pr-3 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 hover:shadow-md transition-shadow duration-300"
-          placeholder="Tell us about yourself"
-          value={form.bio}
-          onChange={(e) => handleChange('bio', e.target.value)}
-          maxLength="500"
-        />
-        <span className="absolute bottom-2 right-3 text-xs text-gray-500">{form.bio.length}/500</span>
-      </div>
-      {errors.bio && <p className="text-red-500 text-xs mt-1">{errors.bio}</p>}
-    </div>
+                {/* Bio */}
+                <div className="animate-slide-up">
+                  <label htmlFor="bio" className="block text-sm font-medium text-gray-700 mb-2">Bio (Optional)</label>
+                  <div className="relative">
+                    <FileText className="absolute left-3 top-3 h-5 w-5 text-gray-400" />
+                    <textarea
+                      id="bio"
+                      rows="3"
+                      className="w-full pl-10 pr-3 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 hover:shadow-md transition-shadow duration-300"
+                      placeholder="Tell us about yourself"
+                      value={form.bio}
+                      onChange={(e) => handleChange('bio', e.target.value)}
+                      maxLength="500"
+                    />
+                    <span className="absolute bottom-2 right-3 text-xs text-gray-500">{form.bio.length}/500</span>
+                  </div>
+                  {errors.bio && <p className="text-red-500 text-xs mt-1">{errors.bio}</p>}
+                </div>
 
-    {/* Phone */}
-    <div className="mt-4 animate-slide-up delay-50">
-      <label htmlFor="phone" className="block text-sm font-medium text-gray-700 mb-2">Phone Number (Optional)</label>
-      <div className="relative">
-        <Phone className="absolute left-3 top-3 h-5 w-5 text-gray-400" />
-        <input
-          id="phone"
-          type="tel"
-          className="w-full pl-10 pr-3 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 hover:shadow-md transition-shadow duration-300"
-          placeholder="e.g., 9876543210"
-          value={form.phone}
-          onChange={(e) => handleChange('phone', e.target.value)}
-        />
-      </div>
-      {errors.phone && <p className="text-red-500 text-xs mt-1">{errors.phone}</p>}
-    </div>
+                {/* Phone */}
+                <div className="mt-4 animate-slide-up delay-50">
+                  <label htmlFor="phone" className="block text-sm font-medium text-gray-700 mb-2">Phone Number (Optional)</label>
+                  <div className="relative">
+                    <Phone className="absolute left-3 top-3 h-5 w-5 text-gray-400" />
+                    <input
+                      id="phone"
+                      type="tel"
+                      className="w-full pl-10 pr-3 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 hover:shadow-md transition-shadow duration-300"
+                      placeholder="e.g., 9876543210"
+                      value={form.phone}
+                      onChange={(e) => handleChange('phone', e.target.value)}
+                    />
+                  </div>
+                  {errors.phone && <p className="text-red-500 text-xs mt-1">{errors.phone}</p>}
+                </div>
 
-    {/* Date of Birth */}
-    <div className="mt-4 animate-slide-up delay-100">
-      <label htmlFor="dateOfBirth" className="block text-sm font-medium text-gray-700 mb-2">Date of Birth (Optional)</label>
-      <div className="relative">
-        <Calendar className="absolute left-3 top-3 h-5 w-5 text-gray-400" />
-        <input
-          id="dateOfBirth"
-          type="date"
-          className="w-full pl-10 pr-3 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 hover:shadow-md transition-shadow duration-300"
-          value={form.dateOfBirth}
-          onChange={(e) => setForm({ ...form, dateOfBirth: e.target.value })}
-        />
-      </div>
-    </div>
+                {/* Date of Birth */}
+                <div className="mt-4 animate-slide-up delay-100">
+                  <label htmlFor="dateOfBirth" className="block text-sm font-medium text-gray-700 mb-2">Date of Birth (Optional)</label>
+                  <div className="relative">
+                    <Calendar className="absolute left-3 top-3 h-5 w-5 text-gray-400" />
+                    <input
+                      id="dateOfBirth"
+                      type="date"
+                      className="w-full pl-10 pr-3 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 hover:shadow-md transition-shadow duration-300"
+                      value={form.dateOfBirth}
+                      onChange={(e) => handleChange('dateOfBirth', e.target.value)} // now triggers age validation
+                    />
+                  </div>
+                  {errors.dateOfBirth && <p className="text-red-500 text-xs mt-1">{errors.dateOfBirth}</p>}
+                </div>
 
-    {/* Gender */}
-    <div className="mt-4 animate-slide-up delay-150">
-      <label htmlFor="gender" className="block text-sm font-medium text-gray-700 mb-2">Gender (Optional)</label>
-      <select
-        id="gender"
-        className="mt-1 block w-full pl-3 pr-10 py-3 text-base border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 sm:text-sm rounded-lg hover:shadow-md transition-shadow duration-300"
-        value={form.gender}
-        onChange={(e) => setForm({ ...form, gender: e.target.value })}
-      >
-        <option value="">Select your gender</option>
-        {genderOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-      </select>
-    </div>
+                {/* Gender */}
+                <div className="mt-4 animate-slide-up delay-150">
+                  <label htmlFor="gender" className="block text-sm font-medium text-gray-700 mb-2">Gender (Optional)</label>
+                  <select
+                    id="gender"
+                    className="mt-1 block w-full pl-3 pr-10 py-3 text-base border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 sm:text-sm rounded-lg hover:shadow-md transition-shadow duration-300"
+                    value={form.gender}
+                    onChange={(e) => setForm({ ...form, gender: e.target.value })}
+                  >
+                    <option value="">Select your gender</option>
+                    {genderOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+                  </select>
+                </div>
 
-    {/* Country */}
-    <div className="mt-4 animate-slide-up delay-200">
-      <label htmlFor="country" className="block text-sm font-medium text-gray-700 mb-2">Country (Optional)</label>
-      <div className="relative">
-        <MapPin className="absolute left-3 top-3 h-5 w-5 text-gray-400" />
-        <select
-          id="country"
-          className="w-full pl-10 pr-3 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 hover:shadow-md transition-shadow duration-300"
-          value={form.country}
-          onChange={(e) => setForm({ ...form, country: e.target.value })}
-        >
-          <option value="">Select your country</option>
-          {countries.map((c) => <option key={c} value={c}>{c}</option>)}
-        </select>
-      </div>
-    </div>
+                {/* Country */}
+                <div className="mt-4 animate-slide-up delay-200">
+                  <label htmlFor="country" className="block text-sm font-medium text-gray-700 mb-2">Country (Optional)</label>
+                  <div className="relative">
+                    <MapPin className="absolute left-3 top-3 h-5 w-5 text-gray-400" />
+                    <select
+                      id="country"
+                      className="w-full pl-10 pr-3 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 hover:shadow-md transition-shadow duration-300"
+                      value={form.country}
+                      onChange={(e) => setForm({ ...form, country: e.target.value })}
+                    >
+                      <option value="">Select your country</option>
+                      {countries.map((c) => <option key={c} value={c}>{c}</option>)}
+                    </select>
+                  </div>
+                </div>
 
-    {/* Profile Image */}
-    <div className="mt-4 animate-slide-up delay-250">
-      <label htmlFor="profileImage" className="block text-sm font-medium text-gray-700 mb-2">Profile Image (Optional)</label>
-      <div className="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-gray-300 border-dashed rounded-md hover:border-blue-400 hover:bg-blue-50 transition-all duration-300 cursor-pointer">
-        <div className="space-y-1 text-center">
-          {form.profileImage ? (
-            <img src={URL.createObjectURL(form.profileImage)} alt="Profile Preview" className="mx-auto h-20 w-20 rounded-full object-cover" />
-          ) : (
-            <Image className="mx-auto h-12 w-12 text-gray-400" />
-          )}
-          <div className="flex text-sm text-gray-600 justify-center">
-            <label htmlFor="file-upload" className="relative cursor-pointer bg-white rounded-md font-medium text-blue-600 hover:text-blue-500">
-              <span>Upload a file</span>
-              <input id="file-upload" name="file-upload" type="file" className="sr-only" onChange={handleFileChange} />
-            </label>
-          </div>
-          <p className="text-xs text-gray-500">PNG, JPG, GIF up to 2MB</p>
-          {errors.profileImage && <p className="text-red-500 text-xs mt-1">{errors.profileImage}</p>}
-        </div>
-      </div>
-    </div>
+                {/* Profile Image */}
+                <div className="mt-4 animate-slide-up delay-250">
+                  <label htmlFor="profileImage" className="block text-sm font-medium text-gray-700 mb-2">Profile Image (Optional)</label>
+                  <div className="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-gray-300 border-dashed rounded-md hover:border-blue-400 hover:bg-blue-50 transition-all duration-300 cursor-pointer">
+                    <div className="space-y-1 text-center">
+                      {form.profileImage ? (
+                        <img src={URL.createObjectURL(form.profileImage)} alt="Profile Preview" className="mx-auto h-20 w-20 rounded-full object-cover" />
+                      ) : (
+                        <Image className="mx-auto h-12 w-12 text-gray-400" />
+                      )}
+                      <div className="flex text-sm text-gray-600 justify-center">
+                        <label htmlFor="file-upload" className="relative cursor-pointer bg-white rounded-md font-medium text-blue-600 hover:text-blue-500">
+                          <span>Upload a file</span>
+                          <input id="file-upload" name="file-upload" type="file" className="sr-only" onChange={handleFileChange} />
+                        </label>
+                      </div>
+                      <p className="text-xs text-gray-500">PNG, JPG, GIF up to 2MB</p>
+                      {errors.profileImage && <p className="text-red-500 text-xs mt-1">{errors.profileImage}</p>}
+                    </div>
+                  </div>
+                </div>
 
-    {/* Navigation Buttons */}
-    <div className="flex justify-between mt-6 animate-slide-up delay-300">
-      <button type="button" onClick={prevStep} className="py-3 px-4 border border-gray-300 rounded-lg shadow-sm text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors duration-200">
-        Previous
-      </button>
-      <button type="submit" disabled={loading} className="py-3 px-4 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed">
-        {loading ? 'Submitting...' : 'Submit'}
-      </button>
-    </div>
-  </div>
-)}
-
+                {/* Navigation Buttons */}
+                <div className="flex justify-between mt-6 animate-slide-up delay-300">
+                  <button type="button" onClick={prevStep} className="py-3 px-4 border border-gray-300 rounded-lg shadow-sm text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors duration-200">
+                    Previous
+                  </button>
+                  <button type="submit" disabled={loading} className="py-3 px-4 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed">
+                    {loading ? 'Submitting...' : 'Submit'}
+                  </button>
+                </div>
+              </div>
+            )}
 
           </div>
         </form>

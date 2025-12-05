@@ -2422,7 +2422,7 @@ const Dashboard = () => {
                         <div className="flex items-center">
                             <Link to="/" className="inline-flex items-center">
                                 <BookOpen className="h-8 w-8 text-blue-600" />
-                                <span className="ml-2 text-xl font-bold text-gray-900">EduPlatform</span>
+                                <span className="ml-2 text-xl font-bold text-gray-900">EduCore</span>
                             </Link>
                         </div>
 
@@ -2536,12 +2536,7 @@ const Dashboard = () => {
                                     </div>
                                 )}
                             </div>
-                            <button
-                                onClick={() => navigate('/profile-settings')}
-                                className="mt-6 bg-blue-600 text-white px-6 py-3 rounded-lg font-semibold hover:bg-blue-700 transition-colors"
-                            >
-                                Edit Profile
-                            </button>
+                            
                         </div>
                     )}
 
